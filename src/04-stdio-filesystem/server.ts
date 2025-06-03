@@ -26,12 +26,12 @@ server.addTool({
   annotations: {
     readOnlyHint: true,
   },
-  execute: async (args) => {
+  execute: async (args): Promise<string> => {
     try {
       const dirPath = path.resolve(args.path);
       const items = await fs.readdir(dirPath, { withFileTypes: true });
 
-      const result = items.map(item => ({
+      const result = items.map((item) => ({
         name: item.name,
         type: item.isDirectory() ? 'directory' : 'file',
         path: path.join(dirPath, item.name),
@@ -54,7 +54,7 @@ server.addTool({
   annotations: {
     readOnlyHint: true,
   },
-  execute: async (args) => {
+  execute: async (args): Promise<string> => {
     try {
       const filePath = path.resolve(args.path);
       const content = await fs.readFile(filePath, 'utf-8');
