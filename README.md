@@ -129,4 +129,33 @@ pnpm example:client:07
 
 ---
 
+## Debugging with MCP Inspector
+
+The MCP Inspector is a powerful tool for interactively testing and debugging your MCP servers. It provides a graphical interface to:
+
+- Discover and invoke tools exposed by your MCP server
+- Inspect available resources and prompts
+- View server metadata and capabilities
+- Test tool inputs/outputs without writing client code
+
+### Why Use MCP Inspector?
+
+- **Rapid Prototyping:** Instantly test new tools or resources as you develop them
+- **Debugging:** Identify issues with tool registration, input validation, or server responses
+- **Learning:** Explore the full capabilities of your MCP server in a user-friendly way
+
+### How to Run MCP Inspector
+
+You can launch the MCP Inspector for any example server. For example, to inspect the Tools Only server:
+
+```bash
+pnpm inspect
+```
+
+This will start the Inspector and connect it to the server defined in `src/01-tools-only/server.ts`.
+
+You can add similar scripts for other servers as needed (see `package.json`).
+
+For more information, see the [official MCP Inspector documentation](https://modelcontextprotocol.io/introduction) and the FastMCP library docs.
+
 For more details, see each example's README for in-depth guides, code samples, and advanced usage tips.

@@ -26,9 +26,18 @@ Effective prompting is crucial for getting desired outputs from an LLM. This dem
 
 ## Running the Demo
 
-_(TODO: Add specific commands to run this demo. This might involve a CLI command or steps to trigger the interaction, e.g., `npm run demo:prompts` or similar. Refer to `package.json` or project scripts.)_
+To run this demo:
 
-When running this demo, pay attention to the structure of the input provided to the AI and how variations in the prompt can lead to different responses or actions from the assistant.
+1. Start the server:
+   ```sh
+   pnpm example:server:03
+   ```
+2. In a separate terminal, after a few seconds, run the client:
+   ```sh
+   pnpm example:client:03
+   ```
+
+Observe how different prompts affect the AI's responses.
 
 ## Key MCP Features/Concepts Demonstrated
 

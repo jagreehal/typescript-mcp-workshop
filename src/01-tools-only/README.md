@@ -23,9 +23,18 @@ This approach is particularly useful for:
 
 ## Running the Demo
 
-_(TODO: Add specific commands to run this demo. This might involve a CLI command or steps to trigger the interaction, e.g., `npm run demo:tools-only` or similar. Refer to `package.json` or project scripts.)_
+To run this demo:
 
-Upon running the demo, you should observe how a user query is processed and how the system responds by only presenting the output of an invoked tool.
+1. Start the server:
+   ```sh
+   pnpm example:server:01
+   ```
+2. In a separate terminal, after a few seconds, run the client:
+   ```sh
+   pnpm example:client:01
+   ```
+
+You should observe the client output showing the available calculator tools and their results.
 
 ## Key MCP Features Demonstrated
 

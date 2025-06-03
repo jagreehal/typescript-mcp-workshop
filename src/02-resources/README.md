@@ -26,9 +26,18 @@ This demo focuses on how resources are defined, provided, and potentially utiliz
 
 ## Running the Demo
 
-_(TODO: Add specific commands to run this demo. This might involve a CLI command or steps to trigger the interaction, e.g., `npm run demo:resources` or similar. Refer to `package.json` or project scripts.)_
+To run this demo:
 
-When you run this demo, observe how a piece of contextual information (the resource) is made available and how it influences the assistant's behavior or output, even if the assistant doesn't explicitly call a "tool" to get it.
+1. Start the server:
+   ```sh
+   pnpm example:server:02
+   ```
+2. In a separate terminal, after a few seconds, run the client:
+   ```sh
+   pnpm example:client:02
+   ```
+
+You should observe the client output showing how resources are made available and used.
 
 ## Key MCP Features Demonstrated
 

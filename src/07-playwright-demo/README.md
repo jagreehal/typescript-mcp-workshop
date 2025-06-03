@@ -37,20 +37,22 @@ This demo illustrates how such an integration might look, allowing an AI to cont
 
 ## Running the Demo
 
-To run this demo, you would typically need to:
+To run this demo:
 
-1.  **Start the Playwright MCP Tool Server:** This server will launch and manage the browser instance.
-    ```bash
-    # (Example command, actual command might differ)
-    npm run demo:playwright:server
-    ```
-2.  **Run the MCP Client/Assistant:** This client will send instructions to the AI, which in turn uses the Playwright tools.
-    ```bash
-    # (Example command, using the script from package.json for client 07)
-    npm run example:client:07
-    ```
+1. Start the server:
+   ```sh
+   pnpm example:server:07
+   ```
+2. In a separate terminal, after a few seconds, run the client:
+   ```sh
+   pnpm example:client:07
+   ```
 
-_(Ensure Playwright browsers are installed: `npx playwright install`)_
+Ensure Playwright browsers are installed:
+
+```sh
+npx playwright install
+```
 
 When running the demo, you might provide a high-level goal to the AI (e.g., "Check the weather on weather.com for London"). Observe how the AI calls a sequence of Playwright tools to open the browser, navigate, interact with elements, and extract the required information.
 

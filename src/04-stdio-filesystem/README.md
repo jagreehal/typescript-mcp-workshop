@@ -24,9 +24,18 @@ Empowering AI assistants with the ability to read from and write to stdio (like 
 
 ## Running the Demo
 
-_(TODO: Add specific commands to run this demo. This might involve a CLI command or steps to trigger the interaction, e.g., `npm run demo:stdio-fs` or similar. Refer to `package.json` or project scripts.)_
+To run this demo:
 
-When running this demo, try asking the assistant to perform various filesystem operations (list current directory, read a known file) or interact via simulated stdio (e.g., ask it to prompt you for input and then echo it back).
+1. Start the server:
+   ```sh
+   pnpm example:server:04
+   ```
+2. In a separate terminal, after a few seconds, run the client:
+   ```sh
+   pnpm example:client:04
+   ```
+
+Try various filesystem and stdio operations as described above.
 
 ## Key MCP Features Demonstrated
 

@@ -30,8 +30,18 @@ This demo covers:
 
 ## Running the Demo
 
-_(TODO: Add specific commands to run this demo. This will involve: 1. Starting the MCP server configured for API key auth. 2. Running a client that attempts to connect, first without an API key (should fail), then with a valid API key (should succeed), and perhaps with an invalid API key (should fail).
-E.g., `npm run demo:auth-api-key:server`, `npm run demo:auth-api-key:client -- --api-key VALID_KEY`. Refer to `package.json` or project scripts.)_
+To run this demo:
+
+1. Start the server:
+   ```sh
+   pnpm example:server:06
+   ```
+2. In a separate terminal, after a few seconds, run the client (replace <YOUR_API_KEY> with your actual key):
+   ```sh
+   pnpm example:client:06 -- --api-key <YOUR_API_KEY>
+   ```
+
+Try running the client with and without a valid API key to observe authentication behavior.
 
 When running the demo, observe the server's response when requests are made with and without a valid API key. Check server logs for authentication success/failure messages.
 
