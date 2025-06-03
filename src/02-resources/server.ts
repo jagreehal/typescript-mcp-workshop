@@ -1,7 +1,12 @@
 #!/usr/bin/env node
 
 import { FastMCP } from 'fastmcp';
-import { SERVER_CONFIG, MIME_TYPES, RESOURCE_NAMES, RESOURCE_URIS } from './constants';
+import {
+  SERVER_CONFIG,
+  MIME_TYPES,
+  RESOURCE_NAMES,
+  RESOURCE_URIS,
+} from './constants';
 
 /**
  * Resources Deep-Dive Example Server
@@ -84,7 +89,14 @@ server.addResource({
       },
       resourceMetrics: {
         totalResources: 8, // Will match actual count
-        resourceTypes: ['logs', 'status', 'config', 'documentation', 'images', 'data'],
+        resourceTypes: [
+          'logs',
+          'status',
+          'config',
+          'documentation',
+          'images',
+          'data',
+        ],
         lastAccessed: new Date().toISOString(),
       },
     };
@@ -361,7 +373,14 @@ server.addResource({
   description: 'Sample performance metrics in CSV format',
   load: async () => {
     // Generate sample metrics data
-    const headers = ['timestamp', 'requests', 'response_time_ms', 'error_rate', 'cpu_usage', 'memory_mb'];
+    const headers = [
+      'timestamp',
+      'requests',
+      'response_time_ms',
+      'error_rate',
+      'cpu_usage',
+      'memory_mb',
+    ];
     const rows = [headers.join(',')];
 
     // Generate 10 sample data points
@@ -373,7 +392,9 @@ server.addResource({
       const cpuUsage = (Math.random() * 80 + 10).toFixed(1);
       const memoryMb = Math.floor(Math.random() * 500) + 100;
 
-      rows.push(`${timestamp},${requests},${responseTime},${errorRate},${cpuUsage},${memoryMb}`);
+      rows.push(
+        `${timestamp},${requests},${responseTime},${errorRate},${cpuUsage},${memoryMb}`,
+      );
     }
 
     return {
@@ -390,7 +411,8 @@ server.addResource({
   description: 'Model Context Protocol logo image',
   load: async () => {
     // Simple 32x32 placeholder image representing an "MCP" logo
-    const base64Image = 'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAAdgAAAHYBTnsmCAAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAANCSURBVFiFtZdNaBNREMefmSRN0lqtWj9QLEVQwYMHL168eFAQD4IHL3rwA71YQdCDBy8ePHhQPHhQPOhBBQ9eFLx48OJBwYMHBQ9eFLx48aBY8QNbP2qTJpud8ZDdJJvsJmk/+EEyz7z3/2femzcvAv+RiAhERERERDRgIXjA4hfm+sT/M7q7u4nrujiOg+u6OI6D67q4rovjODiOg+M4uK6L4zg4joPrujiOg+u6OI6D4zg4joPjOLiui+M4OI6D67q4rovjODiOg+M4uK6L4zg4joPrujiOg+u6uK6L4zg4jkM4HCYcDhMOhwmHw4TDYcLhMOFwmHA4TDgcJhwOEw6HCYfDhMNhwuEw4XCYcDhMOBwmHA4TDocJh8OEw2HC4TDhcJhwOEw4HCYcDhMOhwmHw4TDYcLhMOFwmHA4TDgcJhwOEw6HCYfDhMNhwuEw4XCYcDhMOBwmHA4TDocJh8OEw2HC4TDhcJhwOEw4HCYcDhMOhwmHw4TDYcLhMOFwmHA4TDgcJhwOEw6HCYfDhMNhwuEw4XCYcDhMOBwmHA4TDocJh8OEw2HC4TDhcJhwOEw4HCYcDhMOhwmHw4TDYcLhMOFwmHA4TDgcJhwOEw6HCYfDhMNhwuEw4XCYcDhMOBwmHA4TDocJh8OEw2HC4TDhcJhwOEw4HCYcDhMOhwmHw4TDYcLhMOFwmHA4TDgcJhwOEw6HCYfDhMNhwuEw4XCYcDhMOBwmHA4TDocJh8OEw2HC4TDhcJhwOEw4HCYcDhMOhwmHw4TDYcLhMOFwmHA4TDgcJhwOEw6HCYfDhMNhwuEw4XCYcDhMOBwmHA4TDocJh8OEw2HC4TDhcJhwOEw4HCYcDhMOhwmHw4TDYcLhMOFwmHA4TDgcJhwOEw6HCYfDhMNhwuEw4XCYcDhMOBwmHA4TDocJh8OEw2HC4TDhcJhwOEw4HCYcDhMOhwmHw4TDYcLhMOFwmHA4TDgcJhwOEw6HCYfDhMNhwuEw4XCYcDhMOBwmHA4TDocJh8OEw2HC4TDhcJhwOEw4HCYcDhMOhwmHw4TDYcLhMOFwmHA4TDgcJhwOEw6HCYfDhMNhwuEw4XCYcDhMOBwmHA4TDocJh8OEw2HC4TDhcJhwOEw4HCYcDhMOhwmHw4TDYcLhMOFwmHA4TDgcJhwOEw6HCYfDhMNhwuEw4XCYcDhMOBwmHA4TDocJh8OEw2HC4TDhcJhwOEw4HCYcDhMOhwmHw4TDYcLhMOFwmHA4TDgcJhwOEw6HCYfDhMNhwuEw4XCYcDhMOBwmHA4TDocJh8OEw2HC4TDhcJhwOEw4HCYcDhMOhwmHw4TDYcLhMOFwmHA4/AHQkPF1xUMqnwAAAABJRU5ErkJggg==';
+    const base64Image =
+      'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAAdgAAAHYBTnsmCAAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAANCSURBVFiFtZdNaBNREMefmSRN0lqtWj9QLEVQwYMHL168eFAQD4IHL3rwA71YQdCDBy8ePHhQPHhQPOhBBQ9eFLx48OJBwYMHBQ9eFLx48aBY8QNbP2qTJpud8ZDdJJvsJmk/+EEyz7z3/2femzcvAv+RiAhERERERDRgIXjA4hfm+sT/M7q7u4nrujiOg+u6OI6D67q4rovjODiOg+M4uK6L4zg4joPrujiOg+u6OI6D4zg4joPjOLiui+M4OI6D67q4rovjODiOg+M4uK6L4zg4joPrujiOg+u6uK6L4zg4jkM4HCYcDhMOhwmHw4TDYcLhMOFwmHA4TDgcJhwOEw6HCYfDhMNhwuEw4XCYcDhMOBwmHA4TDocJh8OEw2HC4TDhcJhwOEw4HCYcDhMOhwmHw4TDYcLhMOFwmHA4TDgcJhwOEw6HCYfDhMNhwuEw4XCYcDhMOBwmHA4TDocJh8OEw2HC4TDhcJhwOEw4HCYcDhMOhwmHw4TDYcLhMOFwmHA4TDgcJhwOEw6HCYfDhMNhwuEw4XCYcDhMOBwmHA4TDocJh8OEw2HC4TDhcJhwOEw4HCYcDhMOhwmHw4TDYcLhMOFwmHA4TDgcJhwOEw6HCYfDhMNhwuEw4XCYcDhMOBwmHA4TDocJh8OEw2HC4TDhcJhwOEw4HCYcDhMOhwmHw4TDYcLhMOFwmHA4TDgcJhwOEw6HCYfDhMNhwuEw4XCYcDhMOBwmHA4TDocJh8OEw2HC4TDhcJhwOEw4HCYcDhMOhwmHw4TDYcLhMOFwmHA4TDgcJhwOEw6HCYfDhMNhwuEw4XCYcDhMOBwmHA4TDocJh8OEw2HC4TDhcJhwOEw4HCYcDhMOhwmHw4TDYcLhMOFwmHA4TDgcJhwOEw6HCYfDhMNhwuEw4XCYcDhMOBwmHA4TDocJh8OEw2HC4TDhcJhwOEw4HCYcDhMOhwmHw4TDYcLhMOFwmHA4TDgcJhwOEw6HCYfDhMNhwuEw4XCYcDhMOBwmHA4TDocJh8OEw2HC4TDhcJhwOEw4HCYcDhMOhwmHw4TDYcLhMOFwmHA4TDgcJhwOEw6HCYfDhMNhwuEw4XCYcDhMOBwmHA4TDocJh8OEw2HC4TDhcJhwOEw4HCYcDhMOhwmHw4TDYcLhMOFwmHA4TDgcJhwOEw6HCYfDhMNhwuEw4XCYcDhMOBwmHA4TDocJh8OEw2HC4TDhcJhwOEw4HCYcDhMOhwmHw4TDYcLhMOFwmHA4TDgcJhwOEw6HCYfDhMNhwuEw4XCYcDhMOBwmHA4TDocJh8OEw2HC4TDhcJhwOEw4HCYcDhMOhwmHw4TDYcLhMOFwmHA4/AHQkPF1xUMqnwAAAABJRU5ErkJggg==';
 
     return {
       text: base64Image,
@@ -409,7 +431,9 @@ server.addResource({
     const shouldFail = Math.random() < 0.3; // 30% chance of failure
 
     if (shouldFail) {
-      throw new Error('Simulated resource failure - resource temporarily unavailable');
+      throw new Error(
+        'Simulated resource failure - resource temporarily unavailable',
+      );
     }
 
     return {
@@ -421,12 +445,12 @@ server.addResource({
 // Event handlers to demonstrate server lifecycle
 server.on('connect', (event) => {
   console.log('🗂️  Client connected to resources deep-dive server');
-  console.log(`   Session: ${event.session}`);
+  console.log(`   Session: ${JSON.stringify(event.session, null, 2)}`);
 });
 
 server.on('disconnect', (event) => {
   console.log('❌ Client disconnected from resources deep-dive server');
-  console.log(`   Session: ${event.session}`);
+  console.log(`   Session: ${JSON.stringify(event.session, null, 2)}`);
 });
 
 // Start the server

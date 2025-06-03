@@ -41,11 +41,11 @@ This is a user management server that provides access to user data.
 
 // Event handlers
 server.on('connect', (event) => {
-  console.log('Client connected:', event.session);
+  console.log('Client connected:', JSON.stringify(event.session, null, 2));
 });
 
 server.on('disconnect', (event) => {
-  console.log('Client disconnected:', event.session);
+  console.log('Client disconnected:', JSON.stringify(event.session, null, 2));
 });
 
 server.addTool({

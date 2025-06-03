@@ -1,8 +1,13 @@
+import 'dotenv/config';
+
 import { ollama } from 'ollama-ai-provider';
 
 import { groq } from '@ai-sdk/groq';
+import { mistral } from '@ai-sdk/mistral';
 
 export const groqModel = groq('llama-3.3-70b-versatile', {});
+
+export const mistralModel = mistral('mistral-small-latest', {});
 
 export const qwen3 = ollama('qwen3:latest', {
   structuredOutputs: true,
@@ -10,4 +15,4 @@ export const qwen3 = ollama('qwen3:latest', {
 export const llama3_2 = ollama('llama3.2:latest', {
   structuredOutputs: true,
 });
-export const model = groqModel;
+export const model = mistralModel;

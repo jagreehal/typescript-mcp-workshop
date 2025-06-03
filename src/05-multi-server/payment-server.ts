@@ -66,11 +66,17 @@ This is a payment processing server that provides access to transaction data.
 
 // Event handlers
 server.on('connect', (event) => {
-  console.log('Client connected to payment server:', event.session);
+  console.log(
+    'Client connected to payment server:',
+    JSON.stringify(event.session, null, 2),
+  );
 });
 
 server.on('disconnect', (event) => {
-  console.log('Client disconnected from payment server:', event.session);
+  console.log(
+    'Client disconnected from payment server:',
+    JSON.stringify(event.session, null, 2),
+  );
 });
 
 // Tool: Get transactions by email

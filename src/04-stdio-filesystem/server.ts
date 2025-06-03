@@ -9,11 +9,11 @@ const server = new FastMCP({
 });
 
 server.on('connect', (event) => {
-  console.log('Client connected:', event.session);
+  console.log('Client connected:', JSON.stringify(event.session, null, 2));
 });
 
 server.on('disconnect', (event) => {
-  console.log('Client disconnected:', event.session);
+  console.log('Client disconnected:', JSON.stringify(event.session, null, 2));
 });
 
 // Tool: List directory contents
