@@ -88,12 +88,12 @@ server.addTool({
 // Event handlers to demonstrate server lifecycle
 server.on('connect', (event) => {
   console.log('🔗 Client connected to tools-only server');
-  console.log(`   Session: ${event.session}`);
+  console.log(`   Session: ${JSON.stringify(event.session, null, 2)}`);
 });
 
 server.on('disconnect', (event) => {
   console.log('❌ Client disconnected from tools-only server');
-  console.log(`   Session: ${event.session}`);
+  console.log(`   Session: ${JSON.stringify(event.session, null, 2)}`);
 });
 
 // Start the server

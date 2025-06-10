@@ -5,16 +5,14 @@ import {
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio';
 import { model } from '../model';
 
-
 const mcpClient = await createMCPClient({
   transport: new StdioClientTransport({
     command: 'npx',
-    args: ['tsx', 'src/02-stdio-filesystem/server.ts'],
+    args: ['tsx', 'src/04-stdio-filesystem/server.ts'],
   }),
 });
 
 const tools = await mcpClient.tools();
-
 
 console.dir(tools, { depth: null });
 
