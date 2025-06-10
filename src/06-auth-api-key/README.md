@@ -1,66 +1,76 @@
 # MCP Demo: API Key Authentication
 
-This demo demonstrates a common authentication mechanism for Model Context Protocol (MCP) servers: API Key Authentication.
+## Introduction
 
-## Overview
+Security is a cornerstone of any system that exposes powerful tools or sensitive data. When building Model Context Protocol (MCP) servers, it's vital to ensure that only authorised users and applications can access your AI's capabilities. API key authentication is a simple yet effective way to secure your endpoints, and is widely used in both development and production environments. This demo shows how to implement and use API key authentication with MCP, so you can keep your services safe and under control.
 
-When exposing AI tools and resources via MCP, especially over a network, it's crucial to secure access. API Key Authentication is a straightforward method where clients must present a valid API key with their requests to be granted access.
+## Why Use API Keys?
 
-This demo covers:
+API keys act as digital passes—only those with a valid key can access your server's tools and resources. This approach is:
 
-- How an MCP server can be configured to require API keys.
-- How clients should include the API key in their requests.
-- Basic principles of API key management (though not an exhaustive security guide).
+- **Straightforward to implement**
+- **Easy to manage and rotate**
+- **Suitable for server-to-server or trusted client scenarios**
 
-## How it Works
+While not as sophisticated as OAuth, API keys provide a solid baseline for many use cases.
 
-1.  **API Key Generation & Distribution:**
-    - The server administrator generates unique API keys.
-    - These keys are securely distributed to authorized clients/users.
-2.  **Server Configuration:**
-    - The MCP server is configured with a list of valid API keys or a mechanism to validate them (e.g., checking against a database).
-    - Middleware or a request handler is set up to inspect incoming requests for an API key.
-3.  **Client Request:**
-    - The MCP client includes its assigned API key in the request, typically in an HTTP header (e.g., `Authorization: Bearer <YOUR_API_KEY>` or a custom header like `X-API-Key: <YOUR_API_KEY>`).
-4.  **Server-Side Validation:**
-    - The server extracts the API key from the request.
-    - It validates the key against its list of known, valid keys.
-    - If the key is valid and authorized, the request is processed.
-    - If the key is missing, invalid, or unauthorized, the server rejects the request, usually with an HTTP 401 (Unauthorized) or 403 (Forbidden) status code.
+## How It Works: Step by Step
+
+1. **API Key Generation & Distribution:**
+   - The server administrator generates unique API keys.
+   - Keys are securely distributed to authorised users or systems.
+2. **Server Configuration:**
+   - The MCP server is set up to recognise and validate incoming API keys (e.g., via a list or database).
+   - Middleware or request handlers check each request for a valid key.
+3. **Client Request:**
+   - The client includes its API key in the request, usually in an HTTP header (e.g., `Authorization: Bearer <YOUR_API_KEY>` or `X-API-Key: <YOUR_API_KEY>`).
+4. **Server-Side Validation:**
+   - The server extracts and checks the API key.
+   - If valid, the request proceeds; if not, it's rejected with an appropriate error code (401 or 403).
 
 ## Running the Demo
 
-To run this demo:
+To try out this demo:
 
 1. Start the server:
    ```sh
    pnpm example:server:06
    ```
-2. In a separate terminal, after a few seconds, run the client (replace <YOUR_API_KEY> with your actual key):
+2. In a separate terminal, after a few seconds, run the client (replace `<YOUR_API_KEY>` with your actual key):
    ```sh
    pnpm example:client:06 -- --api-key <YOUR_API_KEY>
    ```
 
-Try running the client with and without a valid API key to observe authentication behavior.
+Try running the client with and without a valid API key to see how authentication is enforced.
 
-When running the demo, observe the server's response when requests are made with and without a valid API key. Check server logs for authentication success/failure messages.
+## Key MCP Features Demonstrated
 
-## Key MCP Features/Concepts Demonstrated
-
-- **Securing MCP Endpoints:** A practical example of adding an authentication layer to an MCP server.
-- **Client-Side Authentication:** How clients need to adapt to send authentication credentials.
-- **Middleware/Request Handling:** Conceptual understanding of how incoming requests are intercepted and validated before reaching the core MCP logic.
+- **Securing Endpoints:** Adding an authentication layer to your MCP server.
+- **Client-Side Authentication:** How clients must adapt to send credentials.
+- **Middleware/Request Handling:** How requests are intercepted and validated before reaching core logic.
 
 ## Best Practices for API Key Authentication
 
-- **Strong Keys:** Generate long, random, and unique API keys.
-- **Secure Storage & Transmission:**
-  - Clients should store API keys securely (e.g., environment variables, secret management systems), not hardcoded in source code.
-  - Always transmit API keys over HTTPS to prevent interception.
-- **Principle of Least Privilege:** Grant API keys only the necessary permissions. If possible, have different keys for different levels of access.
-- **Key Rotation:** Implement a policy for regularly rotating API keys.
-- **Monitoring & Revocation:** Monitor API key usage for suspicious activity. Have a mechanism to revoke compromised keys quickly.
-- **Rate Limiting:** Combine API key auth with rate limiting to prevent abuse by a single key.
-- **Don't Expose Keys Client-Side (in Browsers):** API keys used for server-to-server communication or backend MCP servers should never be exposed directly in frontend JavaScript that runs in a user's browser.
+- **Strong Keys:** Generate long, random, and unique keys.
+- **Secure Storage:** Store keys in environment variables or secret managers, never in source code.
+- **HTTPS Only:** Always transmit API keys over secure (HTTPS) connections.
+- **Least Privilege:** Assign only the permissions needed for each key.
+- **Key Rotation:** Regularly rotate keys and have a process for revocation.
+- **Monitoring:** Track usage and watch for suspicious activity.
+- **Rate Limiting:** Combine with rate limiting to prevent abuse.
+- **Never Expose Keys in Browsers:** Only use API keys in trusted server environments, not in frontend code.
 
-While API Key Authentication is relatively simple to implement, it forms a fundamental layer of security for many MCP deployments. For more sensitive applications, consider combining it with other security measures or using more robust protocols like OAuth 2.0.
+## Troubleshooting & Tips
+
+- If authentication fails, check that the key is correct and included in the request header.
+- For production, consider logging failed authentication attempts for security audits.
+- For more sensitive applications, consider upgrading to OAuth or another robust protocol.
+
+## Further Reading
+
+- [Model Context Protocol Documentation](https://modelcontextprotocol.org/)
+- [API Security Best Practices](https://yourcompany.com/blog/api-security)
+
+---
+
+API key authentication is a practical and effective way to secure your MCP servers. By following best practices, you can protect your tools and data while keeping integration simple and reliable.

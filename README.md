@@ -12,9 +12,13 @@ The workshop requires the following tools to be installed:
 
 - Node.js v22 or higher
 - pnpm (Package manager)
-- Ollama - Install from [ollama.ai](https://ollama.ai)
-  - The workshop uses the `llama3.2:latest` model
 - TypeScript configuration (provided in the repo)
+
+## LLM
+
+You can the examples using [ollama](https://ollama.ai), and most of the time a model like `llama3.2:latest` will work, but for better results you should use a frontier models like those from OpenAI, Anthropic, Google, Mistral, Groq, etc.
+
+Update the `model` variable in `src/model.ts` to use the model you want to use.
 
 ## Setup and Environment Check
 

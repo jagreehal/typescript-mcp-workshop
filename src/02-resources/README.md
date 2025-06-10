@@ -1,32 +1,32 @@
 # MCP Demo: Resources
 
-This demo illustrates the concept of "resources" within the Model Context Protocol (MCP).
+## Introduction
 
-## Overview
+Context is everything when it comes to intelligent assistants. The Model Context Protocol (MCP) allows you to provide AI with "resources"—structured pieces of information that help it make better decisions and give more relevant answers. This demo explores how to make contextual data available to your AI, so it can be more helpful, accurate, and aware of its environment.
 
-In MCP, resources represent contextual information or data that can be made available to an AI assistant. Unlike tools, which are invokable actions, resources are typically read-only pieces of information that the assistant can use to inform its responses or decision-making processes.
+Resources are not actions or tools—they are facts, data, or snippets of knowledge the AI can reference. Think of them as the assistant's memory or reference library.
 
-Examples of resources include:
+## Why Use Resources?
 
-- **User Profile:** Information about the current user.
-- **Application State:** Current settings or data within the application.
-- **Knowledge Bases:** Snippets from FAQs, documentation, or other relevant texts.
-- **Real-time Data:** Stock prices, weather information, etc.
+Imagine an AI that knows your name, your preferences, or the current state of your application. By providing resources, you enable the AI to:
 
-This demo focuses on how resources are defined, provided, and potentially utilized by an assistant within an MCP interaction.
+- Personalise its responses
+- Reference up-to-date information
+- Avoid asking unnecessary questions
+- Make more informed decisions
 
-## How it Works
+## How It Works: Step by Step
 
-1.  **Resource Definition:** Resources are defined with a name and a schema (often implicitly or explicitly a string or simple JSON structure).
-2.  **Resource Provisioning:** The MCP application makes the resource available. This could involve fetching data from a database, an API, or simply providing static content.
-3.  **Assistant Access (Implicit or Explicit):**
-    - **Implicit:** The resource content might be automatically injected into the prompt or context provided to the AI assistant.
-    - **Explicit:** The assistant might be aware of available resources and specifically request or refer to them (though this blurs slightly into tool-like behavior if it's an active fetch).
-4.  **Contextual Enhancement:** The assistant uses the information from the resource to generate a more informed, relevant, or personalized response.
+1. **Resource Definition:** Define resources with clear names and data structures (e.g., user profile, app settings, knowledge base entries).
+2. **Provisioning:** The MCP application makes these resources available—either by fetching from a database, an API, or providing static content.
+3. **AI Access:**
+   - _Implicit_: The resource is automatically included in the AI's context.
+   - _Explicit_: The AI is told about available resources and can request or reference them as needed.
+4. **Contextual Enhancement:** The AI uses the resource to generate more relevant, accurate, or personalised responses.
 
 ## Running the Demo
 
-To run this demo:
+To try out this demo:
 
 1. Start the server:
    ```sh
@@ -37,19 +37,32 @@ To run this demo:
    pnpm example:client:02
    ```
 
-You should observe the client output showing how resources are made available and used.
+You should see how resources are made available and used by the AI.
 
 ## Key MCP Features Demonstrated
 
-- **Resource Concept:** Understanding what constitutes a resource in MCP.
-- **Making Resources Available:** How applications can provide contextual data.
-- **Contextual Influence:** How resources can shape an AI's responses without direct tool invocation for that specific piece of data.
+- **Resource Concept:** What counts as a resource in MCP.
+- **Provisioning:** How to provide contextual data to the AI.
+- **Contextual Influence:** How resources shape the AI's responses, even without direct tool invocation.
 
-## Best Practices
+## Best Practices & Guidance
 
-- **Relevance:** Provide resources that are directly relevant to the types of tasks the assistant is expected to perform.
-- **Conciseness:** Keep resource content as concise as possible to avoid overwhelming the assistant or consuming excessive context window.
-- **Freshness:** Ensure that resources providing dynamic data are kept up-to-date.
-- **Clarity:** If the assistant is expected to be aware of resources, their naming and purpose should be clear.
+- **Relevance:** Only provide resources that are directly useful for the tasks at hand.
+- **Conciseness:** Keep resources as brief as possible to avoid overwhelming the AI or exceeding context limits.
+- **Freshness:** Ensure dynamic resources (like real-time data) are kept up to date.
+- **Clarity:** Use clear names and descriptions so the AI (and developers) know what each resource is for.
 
-This demo helps in understanding how MCP allows for rich contextual information to be seamlessly integrated into AI interactions, leading to more capable and knowledgeable assistants.
+## Troubleshooting & Tips
+
+- If the AI seems unaware of a resource, check that it is correctly defined and included in the context.
+- For sensitive data, ensure resources are only provided to authorised users or sessions.
+- Use resources to reduce repetitive questions—e.g., provide user preferences up front.
+
+## Further Reading
+
+- [Model Context Protocol Documentation](https://modelcontextprotocol.org/)
+- [Contextual AI Design](https://yourcompany.com/blog/contextual-ai)
+
+---
+
+By making resources available to your AI, you empower it to act with greater intelligence and relevance. This demo shows how a little context can go a long way in building smarter, more helpful assistants.

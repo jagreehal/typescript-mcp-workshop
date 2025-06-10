@@ -1,30 +1,32 @@
 # MCP Demo: Stdio & Filesystem Tools
 
-This demo showcases how Model Context Protocol (MCP) can be used to provide an AI assistant with tools to interact with standard input/output (stdio) and the filesystem.
+## Introduction
 
-## Overview
+What if your AI assistant could interact with your computer—reading files, writing data, or even asking you questions via the console? The Model Context Protocol (MCP) makes this possible by exposing standard input/output (stdio) and filesystem operations as tools the AI can use. This demo shows how to safely and effectively empower your AI with these capabilities, while keeping security and control firmly in your hands.
 
-Empowering AI assistants with the ability to read from and write to stdio (like the console) and interact with files and directories on a filesystem greatly expands their utility. This demo illustrates:
+## Why Give AI Access to Stdio and Files?
 
-- **Filesystem Tools:** Defining tools for actions like listing directory contents (`ls`), reading files (`cat`), writing to files, creating directories (`mkdir`), etc.
-- **Stdio Tools:** Defining tools for reading user input from stdin or printing output to stdout/stderr.
-- **Safe Interaction:** Considerations for security and safety when granting AI access to these powerful capabilities.
+By allowing the AI to interact with files and the console, you unlock a world of practical applications:
 
-## How it Works
+- Automate repetitive file tasks (reading, writing, organising)
+- Build interactive scripts that ask users for input
+- Enable the AI to process or generate reports, logs, or data files
 
-1.  **Tool Definition:** Tools are defined for specific stdio and filesystem operations. Each tool has a clear purpose, parameters (e.g., file path, directory name, content to write), and expected output format.
-    - Example Filesystem Tool: `readFile(path: string) -> string`
-    - Example Stdio Tool: `getUserInput(prompt: string) -> string`
-2.  **User Request/AI Decision:** A user might ask the AI to list files in a directory, read a specific file, or save some generated text.
-3.  **Tool Invocation:** The AI assistant, based on the prompt, selects the appropriate stdio or filesystem tool and invokes it with the necessary arguments.
-4.  **MCP Execution:** The MCP framework executes the tool, interacting with the underlying operating system's stdio streams or filesystem APIs.
-5.  **Result/Feedback:**
-    - For read operations (e.g., `ls`, `cat`, `getUserInput`), the tool returns the data to the AI, which can then present it to the user or use it in further processing.
-    - For write operations (e.g., writing to a file, `mkdir`), the tool typically returns a success/failure status.
+However, with great power comes great responsibility—so security and careful design are paramount.
+
+## How It Works: Step by Step
+
+1. **Tool Definition:** Define tools for specific stdio and filesystem operations (e.g., `readFile`, `writeFile`, `listDirectory`, `getUserInput`). Each tool should have clear parameters and outputs.
+2. **User Request or AI Decision:** The user asks the AI to perform an action (e.g., "Show me all files in Documents"), or the AI decides it needs to read or write data.
+3. **Tool Invocation:** The AI selects and calls the appropriate tool with the necessary arguments.
+4. **MCP Execution:** The MCP framework executes the tool, interacting with the underlying operating system.
+5. **Result or Feedback:**
+   - For read operations, the tool returns data to the AI, which can use or present it.
+   - For write operations, the tool returns a success/failure status, and the AI can inform the user.
 
 ## Running the Demo
 
-To run this demo:
+To try out this demo:
 
 1. Start the server:
    ```sh
@@ -39,20 +41,30 @@ Try various filesystem and stdio operations as described above.
 
 ## Key MCP Features Demonstrated
 
-- **Bridging to OS Capabilities:** How MCP tools can act as a bridge between the AI and system-level functionalities.
-- **Action-Oriented Tools:** Demonstrates tools that perform tangible actions rather than just returning data.
-- **Structured Access to Unstructured Environments:** Providing a controlled way for AI to interact with potentially complex environments like a filesystem.
+- **Bridging to OS Capabilities:** MCP tools can act as a bridge between the AI and your computer's capabilities.
+- **Action-Oriented Tools:** Demonstrates tools that perform real actions, not just return data.
+- **Structured Access:** Provides a controlled way for AI to interact with complex environments like the filesystem.
 
-## Best Practices & Security Considerations
+## Best Practices & Security Guidance
 
-- **Permissions and Sandboxing:** This is CRITICAL. Granting an AI direct, unrestricted filesystem or stdio access is a major security risk. Implement strict permission controls:
-  - Limit the directories the AI can access.
-  - Restrict the types of files it can read/write.
-  - Sanitize all inputs (like paths) to prevent injection attacks (e.g., path traversal).
-  - Consider running AI operations in a sandboxed environment.
-- **Clear Tool Scopes:** Define tools with very specific actions (e.g., `readFile` is better than a generic `filesystemAccess` tool).
-- **User Confirmation:** For potentially destructive actions (e.g., deleting files, overwriting content), always seek explicit user confirmation before the AI executes the tool.
-- **Error Handling:** Robustly handle errors like file not found, permission denied, disk full, etc., and provide clear feedback.
-- **Resource Limits:** Implement limits on file sizes, number of files to be read, or amount of stdio interaction to prevent abuse or accidental resource exhaustion.
+- **Strict Permissions:** Only allow the AI access to specific directories or files. Never grant unrestricted access.
+- **Input Sanitisation:** Always validate and sanitise file paths and user input to prevent security risks (e.g., path traversal).
+- **User Confirmation:** For potentially destructive actions (like deleting files), require explicit user approval.
+- **Error Handling:** Handle errors (file not found, permission denied, etc.) gracefully and informatively.
+- **Resource Limits:** Impose limits on file sizes, number of files, or stdio interactions to prevent abuse or accidental overload.
+- **Sandboxing:** Where possible, run AI operations in a sandboxed environment to contain any risks.
 
-This demo provides insight into extending an AI's capabilities to interact with its operating environment, but underscores the paramount importance of security and controlled access when doing so.
+## Troubleshooting & Tips
+
+- If a tool fails, check permissions and input validation first.
+- For interactive scripts, ensure the AI clearly communicates what input it needs from the user.
+- Always log actions taken by the AI for auditability and debugging.
+
+## Further Reading
+
+- [Model Context Protocol Documentation](https://modelcontextprotocol.org/)
+- [Securing AI File Access](https://yourcompany.com/blog/ai-filesystem-security)
+
+---
+
+Giving your AI access to stdio and the filesystem opens up powerful new possibilities—but only if done with care. This demo shows how to balance capability with safety, so your AI can be both useful and trustworthy.
