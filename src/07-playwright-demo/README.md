@@ -28,11 +28,7 @@ By wrapping Playwright actions as MCP tools, you ensure that every browser actio
 
 To try out this demo:
 
-1. Start the server:
-   ```sh
-   pnpm example:server:07
-   ```
-2. In a separate terminal, after a few seconds, run the client:
+1. Run the client:
    ```sh
    pnpm example:client:07
    ```

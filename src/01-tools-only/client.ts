@@ -6,7 +6,7 @@ import {
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp';
 import { PORT } from './constants';
 
-const url = new URL(`http://localhost:${PORT}/stream`);
+const url = new URL(`http://localhost:${PORT}/mcp`);
 const mcpClient = await createMCPClient({
   transport: new StreamableHTTPClientTransport(url),
 });

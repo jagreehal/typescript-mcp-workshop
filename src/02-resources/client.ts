@@ -2,7 +2,7 @@
 
 import { experimental_createMCPClient as createMCPClient } from 'ai';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp';
-import { PORT, SERVER_CONFIG } from './constants';
+import { PORT, RESOURCE_URIS, RESOURCE_NAMES } from './constants';
 
 /**
  * Resources Deep-Dive Example Client
@@ -21,26 +21,21 @@ async function runResourcesDeepDive() {
     // ---
     const mcpClient = await createMCPClient({
       transport: new StreamableHTTPClientTransport(
-        new URL(`http://localhost:${PORT}/stream`),
+        new URL(`http://localhost:${PORT}/mcp`),
       ),
     });
 
     console.log('📡 Connected to resources deep-dive server');
 
-    // Get available resources
-    let resources = [];
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const res = await (mcpClient as any).listResources();
-      resources = Array.isArray(res?.resources) ? res.resources : [];
-      console.log(
-        `🗂️  Available resources: ${resources.length ? resources.map((r: { name?: string; uri?: string }) => r.name || r.uri).join(', ') : 'none'}\n`,
-      );
-    } catch (error) {
-      console.log(
-        `🗂️  Available resources: Unable to list (${error instanceof Error ? error.message : 'Unknown error'})\n`,
-      );
-    }
+    // Build the list of resources from RESOURCE_URIS and RESOURCE_NAMES
+    const resources = Object.entries(RESOURCE_URIS).map(([key, uri]) => ({
+      name: (RESOURCE_NAMES as Record<string, string>)[key] || uri,
+      uri,
+    }));
+
+    console.log(
+      `🗂️  Available resources: ${resources.length ? resources.map((r) => r.name || r.uri).join(', ') : 'none'}\n`,
+    );
 
     // --- Explicitly fetch and display each resource ---
     if (resources.length) {

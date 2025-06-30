@@ -1,14 +1,13 @@
 import {
   experimental_createMCPClient as createMCPClient,
   generateText,
-  type ToolSet,
 } from 'ai';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp';
 import { model } from '../model';
 import { BOB_API_KEY, ALICE_API_KEY, PORT } from './constants';
 
 async function createClient(apiKey: string) {
-  const dbUrl = new URL(`http://localhost:${PORT}/stream`);
+  const dbUrl = new URL(`http://localhost:${PORT}/mcp`);
   return await createMCPClient({
     transport: new StreamableHTTPClientTransport(dbUrl, {
       requestInit: {
