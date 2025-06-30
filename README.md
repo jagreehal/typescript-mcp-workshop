@@ -21,7 +21,6 @@ The workshop requires the following tools to be installed:
 - Node.js v22 or higher
 - pnpm (Package manager)
 - TypeScript configuration (provided in the repo)
-- Docker (for deployment examples)
 
 ## LLM Configuration
 
@@ -36,6 +35,8 @@ Run the setup script to verify your environment is properly configured:
 ```bash
 pnpm setup
 ```
+
+This will run the setup script located at [`scripts/setup.js`](./scripts/setup.js). You can review or run this script directly if you want to see exactly what is being checked or to troubleshoot your environment.
 
 The setup script will:
 
@@ -174,8 +175,6 @@ pnpm inspect
 
 # Inspect specific examples
 pnpm inspect:01  # Local tools-only
-pnpm inspect:08  # Remote fundamentals
-pnpm inspect:09  # OAuth authentication
 ```
 
 ## Comparison with Other Guides
@@ -185,7 +184,6 @@ This workshop provides **more comprehensive coverage** than existing resources b
 - ✅ **Complete OAuth 2.1 Implementation** (not just basic API keys)
 - ✅ **Both Local and Remote Servers** (most guides focus on only one)
 - ✅ **Multiple Transport Protocols** (HTTP+SSE and Streamable HTTP)
-- ✅ **Production Deployment Examples** (Docker, cloud platforms)
 - ✅ **Real API Integration** (not just toy calculators)
 - ✅ **Session Management** (across different transport types)
 - ✅ **Comprehensive Testing** (unit, integration, load tests)
