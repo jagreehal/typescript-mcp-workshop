@@ -66,8 +66,38 @@ server.addTool({
 });
 
 // Start server with stdio transport
-server.start({
-  transportType: 'stdio',
+const startServer = async () => {
+  try {
+    console.log('🚀 Starting File System MCP Server...');
+    console.log('   Transport: STDIO');
+
+    await server.start({
+      transportType: 'stdio',
+    });
+
+    console.log('✅ File System MCP Server started with stdio transport');
+    console.log('📡 Ready for stdio communication');
+    console.log('🗂️  Features: listDirectory, readFile');
+  } catch (error) {
+    console.error('❌ Failed to start filesystem server:', error);
+    throw error;
+  }
+};
+
+// Graceful shutdown handling
+process.on('SIGTERM', async () => {
+  console.log('🛑 Received SIGTERM, shutting down gracefully...');
+  await server.stop();
+  console.log('✅ Filesystem server shut down successfully');
+  process.exit(0);
 });
 
-console.log('File System MCP Server started with stdio transport');
+process.on('SIGINT', async () => {
+  console.log('🛑 Received SIGINT, shutting down gracefully...');
+  await server.stop();
+  console.log('✅ Filesystem server shut down successfully');
+  process.exit(0);
+});
+
+// Start the server
+startServer().catch(console.error);

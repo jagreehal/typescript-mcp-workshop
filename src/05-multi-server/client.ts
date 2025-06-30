@@ -8,12 +8,12 @@ import { USER_SERVER_PORT, PAYMENT_SERVER_PORT } from './constants';
 import { groqModel as model } from '../model';
 
 // Create MCP clients for both servers
-const userUrl = new URL(`http://localhost:${USER_SERVER_PORT}/stream`);
+const userUrl = new URL(`http://localhost:${USER_SERVER_PORT}/mcp`);
 const userClient = await createMCPClient({
   transport: new StreamableHTTPClientTransport(userUrl),
 });
 
-const paymentUrl = new URL(`http://localhost:${PAYMENT_SERVER_PORT}/stream`);
+const paymentUrl = new URL(`http://localhost:${PAYMENT_SERVER_PORT}/mcp`);
 const paymentClient = await createMCPClient({
   transport: new StreamableHTTPClientTransport(paymentUrl),
 });

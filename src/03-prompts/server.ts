@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { FastMCP } from 'fastmcp';
+import { PORT } from './constants';
 
 /**
  * Prompts Mastery Example Server
@@ -519,19 +520,45 @@ server.on('disconnect', (event) => {
 });
 
 // Start the server
-const port = 8089;
+const startServer = async () => {
+  try {
+    console.log(`🚀 Starting Prompts Mastery MCP Server...`);
+    console.log(`   Port: ${PORT}`);
 
-server.start({
-  transportType: 'httpStream',
-  httpStream: { port },
+    await server.start({
+      transportType: 'httpStream',
+      httpStream: { port: PORT },
+    });
+
+    console.log(`✅ Prompts Mastery MCP Server running on port ${PORT}`);
+    console.log(`📡 MCP Endpoint: http://localhost:${PORT}/mcp`);
+    console.log(`🎯 This server focuses exclusively on MCP prompt patterns:`);
+    console.log(`   • Template creation and variable substitution`);
+    console.log(`   • Dynamic prompt generation and customization`);
+    console.log(`   • Conditional logic in prompt construction`);
+    console.log(`   • Multi-role conversation templates`);
+    console.log(`   • Context-aware prompt building`);
+    console.log(`   • AI model integration and optimization`);
+  } catch (error) {
+    console.error('❌ Failed to start prompts server:', error);
+    throw error;
+  }
+};
+
+// Graceful shutdown handling
+process.on('SIGTERM', async () => {
+  console.log('🛑 Received SIGTERM, shutting down gracefully...');
+  await server.stop();
+  console.log('✅ Prompts server shut down successfully');
+  process.exit(0);
 });
 
-console.log(`📝 Prompts Mastery MCP Server running on port ${port}`);
-console.log(`📡 Connect via: http://localhost:${port}/stream`);
-console.log(`🎯 This server focuses exclusively on MCP prompt patterns:`);
-console.log(`   • Template creation and variable substitution`);
-console.log(`   • Dynamic prompt generation and customization`);
-console.log(`   • Conditional logic in prompt construction`);
-console.log(`   • Multi-role conversation templates`);
-console.log(`   • Context-aware prompt building`);
-console.log(`   • AI model integration and optimization`);
+process.on('SIGINT', async () => {
+  console.log('🛑 Received SIGINT, shutting down gracefully...');
+  await server.stop();
+  console.log('✅ Prompts server shut down successfully');
+  process.exit(0);
+});
+
+// Start the server
+startServer().catch(console.error);
