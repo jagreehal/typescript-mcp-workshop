@@ -4,16 +4,6 @@ Model Context Protocol (MCP) is an open protocol that enables language models an
 
 This workshop demonstrates both **local** and **remote** MCP implementations using TypeScript, progressing from basic concepts to production-ready servers that work with Claude, ChatGPT, and other MCP clients.
 
-## Workshop Philosophy
-
-This workshop is structured to provide **more comprehensive coverage** than existing guides by:
-
-- **Progressive Learning**: Start with local servers, then move to remote HTTP servers
-- **Production-Ready Examples**: Full OAuth 2.1, session management, and deployment
-- **Multiple Transport Protocols**: Support both legacy (HTTP+SSE) and modern (Streamable HTTP)
-- **Real-World Integration**: Connect to actual APIs, not just toy examples
-- **Spec Compliance**: Implement all required MCP endpoints and behaviors
-
 ## Prerequisites
 
 The workshop requires the following tools to be installed:
@@ -176,18 +166,6 @@ pnpm inspect
 # Inspect specific examples
 pnpm inspect:01  # Local tools-only
 ```
-
-## Comparison with Other Guides
-
-This workshop provides **more comprehensive coverage** than existing resources by:
-
-- ✅ **Complete OAuth 2.1 Implementation** (not just basic API keys)
-- ✅ **Both Local and Remote Servers** (most guides focus on only one)
-- ✅ **Multiple Transport Protocols** (HTTP+SSE and Streamable HTTP)
-- ✅ **Real API Integration** (not just toy calculators)
-- ✅ **Session Management** (across different transport types)
-- ✅ **Comprehensive Testing** (unit, integration, load tests)
-- ✅ **Troubleshooting Guides** (common issues and solutions)
 
 ## Next Steps
 
