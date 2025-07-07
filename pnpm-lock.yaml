@@ -18,8 +18,8 @@ importers:
         specifier: ^1.3.23
         version: 1.3.23(zod@3.25.67)
       '@modelcontextprotocol/sdk':
-        specifier: ^1.13.2
-        version: 1.13.2
+        specifier: ^1.15.0
+        version: 1.15.0
       ai:
         specifier: ^4.3.17
         version: 4.3.17(react@18.3.1)(zod@3.25.67)
@@ -474,8 +474,8 @@ packages:
     resolution: {integrity: sha512-PN1R7InR48Y6wU8s/vHWc0KOYAjlYQkgCpjUQsNFB078ebdv+empkMI6d1Gg+UIRx8mTrwtbBgv0A6ookGG+0w==}
     hasBin: true
 
-  '@modelcontextprotocol/sdk@1.13.2':
-    resolution: {integrity: sha512-Vx7qOcmoKkR3qhaQ9qf3GxiVKCEu+zfJddHv6x3dY/9P6+uIwJnmuAur5aB+4FDXf41rRrDnOEGkviX5oYZ67w==}
+  '@modelcontextprotocol/sdk@1.15.0':
+    resolution: {integrity: sha512-67hnl/ROKdb03Vuu0YOr+baKTvf1/5YBHBm9KnZdjdAh8hjt4FRCPD5ucwxGB237sBpzlqQsLy1PFu7z/ekZ9Q==}
     engines: {node: '>=18'}
 
   '@nodelib/fs.scandir@2.1.5':
@@ -1499,9 +1499,9 @@ packages:
     resolution: {integrity: sha512-aIL5Fx7mawVa300al2BnEE4iNvo1qETxLrPI/o05L7z6go7fCw1J6EQmbK4FmJ2AS7kgVF/KEZWufBfdClMcPg==}
     engines: {node: '>= 0.6'}
 
-  eventsource-parser@3.0.2:
-    resolution: {integrity: sha512-6RxOBZ/cYgd8usLwsEl+EC09Au/9BcmCKYF2/xbml6DNczf7nv0MQb+7BA2F+li6//I+28VNlQR37XfQtcAJuA==}
-    engines: {node: '>=18.0.0'}
+  eventsource-parser@3.0.3:
+    resolution: {integrity: sha512-nVpZkTMM9rF6AQ9gPJpFsNAMt48wIzB5TQgiTLdHiuO8XEDhUgZEhqKlZWXbIzo9VmJ/HvysHqEaVeD5v9TPvA==}
+    engines: {node: '>=20.0.0'}
 
   eventsource@3.0.7:
     resolution: {integrity: sha512-CRT1WTyuQoD771GW56XEZFQ/ZoSfWid1alKGDYMmkt2yl8UXrVR4pspqWNEcqKvVIzg6PAltWjxcSSPrboA4iA==}
@@ -2491,6 +2491,10 @@ packages:
     resolution: {integrity: sha512-RwNA9Z/7PrK06rYLIzFMlaF+l73iwpzsqRIFgbMLbTcLD6cOao82TaWefPXQvB2fOC4AjuYSEndS7N/mTCbkdQ==}
     engines: {node: '>= 0.8'}
 
+  statuses@2.0.2:
+    resolution: {integrity: sha512-DvEy55V3DB7uknRo+4iOGT5fP1slR8wQohVdknigZPMpMstaKJQWhwiYBACJE3Ul2pTnATihhBYnRhZQHGBiRw==}
+    engines: {node: '>= 0.8'}
+
   strict-event-emitter-types@2.0.0:
     resolution: {integrity: sha512-Nk/brWYpD85WlOgzw5h173aci0Teyv8YdIAEtV+N88nDB0dLlazZyJMIsN6eo1/AR61l+p6CJTG1JIyFaoNEEA==}
 
@@ -2836,11 +2840,6 @@ packages:
     resolution: {integrity: sha512-GQHQqAopRhwU8Kt1DDM8NjibDXHC8eoh1erhGAJPEyveY9qqVeXvVikNKrDz69sHowPMorbPUrH/mx8c50eiBQ==}
     engines: {node: '>=18'}
 
-  zod-to-json-schema@3.24.5:
-    resolution: {integrity: sha512-/AuWwMP+YqiPbsJx5D6TfgRTc4kTLjsh5SOcd4bLsfUg2RcEXrFMJl1DGgdHy2aCfsIA/cr/1JM0xcB2GZji8g==}
-    peerDependencies:
-      zod: ^3.24.1
-
   zod-to-json-schema@3.24.6:
     resolution: {integrity: sha512-h/z3PKvcTcTetyjl1fkj79MHNEjm+HpD6NXheWjzOekY7kV+lwDYnHw+ivHkijnCSMz1yJaWBD9vu/Fcmk+vEg==}
     peerDependencies:
@@ -3145,7 +3144,7 @@ snapshots:
 
   '@modelcontextprotocol/inspector-cli@0.15.0':
     dependencies:
-      '@modelcontextprotocol/sdk': 1.13.2
+      '@modelcontextprotocol/sdk': 1.15.0
       commander: 13.1.0
       spawn-rx: 5.1.2
     transitivePeerDependencies:
@@ -3153,7 +3152,7 @@ snapshots:
 
   '@modelcontextprotocol/inspector-client@0.15.0':
     dependencies:
-      '@modelcontextprotocol/sdk': 1.13.2
+      '@modelcontextprotocol/sdk': 1.15.0
       '@radix-ui/react-checkbox': 1.3.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@radix-ui/react-dialog': 1.1.14(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@radix-ui/react-icons': 1.3.2(react@18.3.1)
@@ -3186,7 +3185,7 @@ snapshots:
 
   '@modelcontextprotocol/inspector-server@0.15.0':
     dependencies:
-      '@modelcontextprotocol/sdk': 1.13.2
+      '@modelcontextprotocol/sdk': 1.15.0
       cors: 2.8.5
       express: 5.1.0
       ws: 8.18.3
@@ -3201,7 +3200,7 @@ snapshots:
       '@modelcontextprotocol/inspector-cli': 0.15.0
       '@modelcontextprotocol/inspector-client': 0.15.0
       '@modelcontextprotocol/inspector-server': 0.15.0
-      '@modelcontextprotocol/sdk': 1.13.2
+      '@modelcontextprotocol/sdk': 1.15.0
       concurrently: 9.2.0
       open: 10.1.2
       shell-quote: 1.8.2
@@ -3220,19 +3219,20 @@ snapshots:
       - typescript
       - utf-8-validate
 
-  '@modelcontextprotocol/sdk@1.13.2':
+  '@modelcontextprotocol/sdk@1.15.0':
     dependencies:
       ajv: 6.12.6
       content-type: 1.0.5
       cors: 2.8.5
       cross-spawn: 7.0.6
       eventsource: 3.0.7
+      eventsource-parser: 3.0.3
       express: 5.1.0
       express-rate-limit: 7.5.1(express@5.1.0)
       pkce-challenge: 5.0.0
       raw-body: 3.0.0
       zod: 3.25.67
-      zod-to-json-schema: 3.24.5(zod@3.25.67)
+      zod-to-json-schema: 3.24.6(zod@3.25.67)
     transitivePeerDependencies:
       - supports-color
 
@@ -4349,15 +4349,15 @@ snapshots:
 
   etag@1.8.1: {}
 
-  eventsource-parser@3.0.2: {}
+  eventsource-parser@3.0.3: {}
 
   eventsource@3.0.7:
     dependencies:
-      eventsource-parser: 3.0.2
+      eventsource-parser: 3.0.3
 
   eventsource@4.0.0:
     dependencies:
-      eventsource-parser: 3.0.2
+      eventsource-parser: 3.0.3
 
   execa@9.6.0:
     dependencies:
@@ -4404,7 +4404,7 @@ snapshots:
       router: 2.2.0
       send: 1.2.0
       serve-static: 2.2.0
-      statuses: 2.0.1
+      statuses: 2.0.2
       type-is: 2.0.1
       vary: 1.1.2
     transitivePeerDependencies:
@@ -4426,7 +4426,7 @@ snapshots:
 
   fastmcp@3.8.2:
     dependencies:
-      '@modelcontextprotocol/sdk': 1.13.2
+      '@modelcontextprotocol/sdk': 1.15.0
       '@standard-schema/spec': 1.0.0
       execa: 9.6.0
       file-type: 21.0.0
@@ -4480,7 +4480,7 @@ snapshots:
       escape-html: 1.0.3
       on-finished: 2.4.1
       parseurl: 1.3.3
-      statuses: 2.0.1
+      statuses: 2.0.2
     transitivePeerDependencies:
       - supports-color
 
@@ -4890,7 +4890,7 @@ snapshots:
 
   mcp-proxy@5.1.1:
     dependencies:
-      '@modelcontextprotocol/sdk': 1.13.2
+      '@modelcontextprotocol/sdk': 1.15.0
       eventsource: 4.0.0
       yargs: 18.0.0
     transitivePeerDependencies:
@@ -5262,7 +5262,7 @@ snapshots:
       ms: 2.1.3
       on-finished: 2.4.1
       range-parser: 1.2.1
-      statuses: 2.0.1
+      statuses: 2.0.2
     transitivePeerDependencies:
       - supports-color
 
@@ -5375,6 +5375,8 @@ snapshots:
   spdx-license-ids@3.0.21: {}
 
   statuses@2.0.1: {}
+
+  statuses@2.0.2: {}
 
   strict-event-emitter-types@2.0.0: {}
 
@@ -5723,10 +5725,6 @@ snapshots:
   yocto-queue@0.1.0: {}
 
   yoctocolors@2.1.1: {}
-
-  zod-to-json-schema@3.24.5(zod@3.25.67):
-    dependencies:
-      zod: 3.25.67
 
   zod-to-json-schema@3.24.6(zod@3.25.67):
     dependencies:
