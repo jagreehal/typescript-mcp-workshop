@@ -40,7 +40,7 @@
     "ai": "^4.3.18",
     "cors": "^2.8.5",
     "dotenv": "^17.2.0",
-    "fastmcp": "^3.8.2",
+    "fastmcp": "^3.8.5",
     "jsonwebtoken": "^9.0.2",
     "npm-run-all": "^4.1.5",
     "ollama-ai-provider": "^1.2.0",
