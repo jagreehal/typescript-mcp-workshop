@@ -1,526 +1,250 @@
-import { FastMCP } from 'fastmcp';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import {
+  getOAuthProtectedResourceMetadataUrl,
+  McpServer,
+  OAuthError,
+  OAuthErrorCode,
+  requireBearerAuth,
+  type AuthInfo,
+} from '@modelcontextprotocol/server';
+import { createLocalJWKSet, jwtVerify } from 'jose';
 import { z } from 'zod';
-import jwt from 'jsonwebtoken';
-import crypto from 'crypto';
+import { isEntrypoint } from '../shared/entrypoint';
+import { serveHttp } from '../shared/serve';
+import { BASELINE_SCOPE, BASE_URL, PORT, RESOURCE, TOOL_SCOPES } from './constants';
+import { createProvider } from './provider';
 
-const PORT = 3009;
-const JWT_SECRET = 'dev-secret-key-change-in-production';
+/**
+ * OAuth 2.1 in front of a 2026-07-28 MCP server.
+ *
+ * The division to copy into production: **transport from the library,
+ * authorization from you.** The SDK gives you `requireBearerAuth`,
+ * `getOAuthProtectedResourceMetadataUrl` and the wire protocol. It performs no
+ * token verification of its own and has no idea what a scope is — you supply an
+ * `OAuthTokenVerifier` that says what a valid token is and which resource it
+ * was minted for, and a guard in each tool.
+ */
 
-// OAuth 2.1 with PKCE Implementation
-interface OAuthClient {
-  id: string;
-  name: string;
-  redirectUris: string[];
-  scopes: string[];
-  createdAt: Date;
-}
+const provider = await createProvider(BASE_URL);
 
-interface AuthorizationCode {
-  code: string;
-  clientId: string;
-  codeChallenge: string;
-  codeChallengeMethod: string;
-  redirectUri: string;
-  scopes: string[];
-  userId: string;
-  expiresAt: Date;
-}
-
-interface AccessToken {
-  token: string;
-  clientId: string;
-  userId: string;
-  scopes: string[];
-  expiresAt: Date;
-  refreshToken?: string;
-}
-
-// In-memory storage (use database in production)
-const clients = new Map<string, OAuthClient>();
-const authCodes = new Map<string, AuthorizationCode>();
-const accessTokens = new Map<string, AccessToken>();
-const users = new Map<
-  string,
-  { id: string; username: string; password: string }
->();
-
-// Initialize demo data
-const demoClient: OAuthClient = {
-  id: 'demo-client-123',
-  name: 'Demo MCP Client',
-  redirectUris: ['http://localhost:3000/callback', 'mcp://auth/callback'],
-  scopes: ['read', 'write', 'admin'],
-  createdAt: new Date(),
+/** The gap the SDK leaves you to fill: turn a token into an identity. */
+const verifier = {
+  async verifyAccessToken(token: string): Promise<AuthInfo> {
+    try {
+      const { payload } = await jwtVerify(token, createLocalJWKSet(provider.jwks), {
+        issuer: BASE_URL,
+        // Audience binding (RFC 8707): a token minted for another resource is
+        // rejected here even if it is otherwise perfectly valid.
+        audience: RESOURCE,
+      });
+      return {
+        token,
+        clientId: (payload.sub as string) ?? 'unknown',
+        scopes: ((payload.scope as string) ?? '').split(' ').filter(Boolean),
+        // The SDK rejects a token with no expiry, so carry the claim.
+        expiresAt: payload.exp,
+        resource: new URL(RESOURCE),
+      };
+    } catch {
+      throw new OAuthError(OAuthErrorCode.InvalidToken, 'invalid token');
+    }
+  },
 };
-clients.set(demoClient.id, demoClient);
 
-const demoUser = {
-  id: 'user-123',
-  username: 'demo',
-  password: 'demo123', // In production, hash passwords!
-};
-users.set(demoUser.id, demoUser);
+const RESOURCE_METADATA_URL = getOAuthProtectedResourceMetadataUrl(new URL(RESOURCE));
 
-// Utility functions
-function generateRandomString(length: number = 32): string {
-  return crypto.randomBytes(length).toString('base64url');
-}
-
-function verifyCodeChallenge(
-  codeVerifier: string,
-  codeChallenge: string,
-  method: string,
-): boolean {
-  if (method === 'S256') {
-    const hash = crypto
-      .createHash('sha256')
-      .update(codeVerifier)
-      .digest('base64url');
-    return hash === codeChallenge;
+/**
+ * What this request needs, decided before a body is read.
+ *
+ * SEP-2243 puts `Mcp-Method` and `Mcp-Name` on every Streamable HTTP POST, so
+ * the auth gate can demand `write` for `update_doc` and `read` for
+ * `search_docs` while staying at the HTTP layer. Anything else — `tools/list`,
+ * `server/discover` — needs the baseline scope only.
+ *
+ * Doing it here rather than inside the handler is not a style preference. The
+ * spec wants an insufficient-scope refusal to be `403` with a
+ * `WWW-Authenticate: Bearer error="insufficient_scope", scope="…"` challenge,
+ * because that challenge is what tells the client which scope to step up to. A
+ * tool handler returning `isError` cannot say any of that, and a client cannot
+ * recover from it.
+ */
+function requiredScopesFor(request: IncomingMessage): string[] {
+  const method = request.headers['mcp-method'];
+  const name = request.headers['mcp-name'];
+  if (method === 'tools/call' && typeof name === 'string') {
+    return [TOOL_SCOPES[name] ?? BASELINE_SCOPE];
   }
-  return codeVerifier === codeChallenge; // plain method (not recommended)
+  return [BASELINE_SCOPE];
 }
 
-function generateAccessToken(
-  clientId: string,
-  userId: string,
-  scopes: string[],
-): AccessToken {
-  const token = jwt.sign(
-    {
-      sub: userId,
-      client_id: clientId,
-      scopes,
-      iat: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + 3600, // 1 hour
-    },
-    JWT_SECRET,
+async function authenticate(
+  request: IncomingMessage,
+  response: ServerResponse,
+): Promise<AuthInfo | undefined> {
+  // Built per request because the required scopes are per request. The gate
+  // answers 401 (no/invalid token) or 403 (insufficient_scope) itself, both
+  // carrying `resource_metadata` so a client that arrives cold can discover
+  // the authorization server from the refusal alone.
+  const gate = requireBearerAuth({
+    verifier,
+    requiredScopes: requiredScopesFor(request),
+    resourceMetadataUrl: RESOURCE_METADATA_URL,
+  });
+
+  const outcome = await gate(toWebRequest(request));
+  if (outcome instanceof Response) {
+    console.log(`   ⛔ ${outcome.status} ${outcome.headers.get('www-authenticate') ?? ''}`);
+    response.writeHead(outcome.status, Object.fromEntries(outcome.headers));
+    response.end(await outcome.text());
+    return undefined;
+  }
+  return outcome;
+}
+
+/**
+ * The gate above is the load-bearing check. This stays as a backstop: it costs
+ * one line, and it still holds on paths the gate cannot reach — a 2025-era
+ * client on the legacy fallback sends no `Mcp-Name`, so the gate can only
+ * demand the baseline scope there.
+ */
+const requireScope = (auth: AuthInfo | undefined, scope: string) =>
+  auth?.scopes.includes(scope)
+    ? undefined
+    : {
+        isError: true as const,
+        content: [{ type: 'text' as const, text: `insufficient_scope: ${scope} required` }],
+      };
+
+const docs = new Map<string, string>([
+  ['runbook', 'Restart the ingest worker, then drain the queue.'],
+  ['changelog', '2.0.0 — moved to MCP 2026-07-28.'],
+]);
+
+export function buildServer(auth: AuthInfo | undefined) {
+  const server = new McpServer(
+    { name: 'acme-docs', version: '2.0.0' },
+    { capabilities: { tools: {} } },
   );
 
-  const accessToken: AccessToken = {
-    token,
-    clientId,
-    userId,
-    scopes,
-    expiresAt: new Date(Date.now() + 3600 * 1000),
-    refreshToken: generateRandomString(),
-  };
+  server.registerTool(
+    'search_docs',
+    {
+      title: 'Search docs',
+      description: 'Search the document store',
+      inputSchema: z.object({ query: z.string().default('') }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ query }) => {
+      const denied = requireScope(auth, 'read');
+      if (denied) return denied;
+      const hits = [...docs.entries()].filter(
+        ([name, body]) => !query || name.includes(query) || body.includes(query),
+      );
+      return { content: [{ type: 'text', text: hits.map(([name]) => name).join(', ') || 'no matches' }] };
+    },
+  );
 
-  accessTokens.set(token, accessToken);
-  return accessToken;
+  server.registerTool(
+    'update_doc',
+    {
+      title: 'Update doc',
+      description: 'Replace the body of a document',
+      inputSchema: z.object({ name: z.string(), body: z.string() }),
+      annotations: { readOnlyHint: false, destructiveHint: true },
+    },
+    async ({ name, body }) => {
+      const denied = requireScope(auth, 'write');
+      if (denied) return denied;
+      docs.set(name, body);
+      return { content: [{ type: 'text', text: `updated ${name}` }] };
+    },
+  );
+
+  return server;
 }
 
-// Create the FastMCP server
-const server = new FastMCP({
-  name: 'oauth-mcp-server',
-  version: '1.0.0',
-  instructions: `
-This is an OAuth 2.1 with PKCE demonstration server.
+/** OAuth endpoints, alongside /mcp on the same origin. */
+async function routes(request: IncomingMessage, response: ServerResponse): Promise<boolean> {
+  const url = new URL(request.url ?? '/', BASE_URL);
 
-It provides secure authentication and authorization for MCP clients using:
-- OAuth 2.1 with PKCE (RFC 7636)
-- JWT access tokens
-- Client registration
-- Token introspection and revocation
-- Discovery endpoints
+  const json = (status: number, body: unknown) => {
+    response
+      .writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' })
+      .end(JSON.stringify(body));
+    return true;
+  };
 
-Use the authentication flow to secure your MCP tools and resources.
-  `.trim(),
-});
+  switch (`${request.method} ${url.pathname}`) {
+    case 'GET /.well-known/oauth-protected-resource':
+      return json(200, provider.protectedResourceMetadata(RESOURCE));
 
-// Protected tool that requires authentication
-server.addTool({
-  name: 'getProtectedData',
-  description: 'Get protected user data (requires authentication)',
-  parameters: z.object({
-    accessToken: z.string().describe('OAuth access token'),
-  }),
-  annotations: {
-    openWorldHint: false,
-    readOnlyHint: true,
-    title: 'Protected Data Access',
-  },
-  execute: async (args) => {
-    try {
-      const tokenData = accessTokens.get(args.accessToken);
-      if (!tokenData || tokenData.expiresAt < new Date()) {
-        return 'Error: Invalid or expired access token';
-      }
+    // This AS publishes OIDC Discovery only. RFC 8414's
+    // `/.well-known/oauth-authorization-server` deliberately 404s: a
+    // conforming client MUST try both, in priority order, and most real
+    // providers are OIDC-first. Serving one of the two is all the spec asks.
+    case 'GET /.well-known/openid-configuration':
+      return json(200, provider.metadata());
 
-      const decoded = jwt.verify(args.accessToken, JWT_SECRET) as {
-        sub: string;
-      };
-      const user = users.get(decoded.sub);
+    case 'GET /.well-known/jwks.json':
+      return json(200, provider.jwks);
 
-      if (!user) {
-        return 'Error: User not found';
-      }
-
-      return `Protected data for user: ${user.username}
-Scopes: ${tokenData.scopes.join(', ')}
-Token expires: ${tokenData.expiresAt.toISOString()}
-User ID: ${user.id}
-Client ID: ${tokenData.clientId}`;
-    } catch (error) {
-      return `Error: ${error instanceof Error ? error.message : 'Token verification failed'}`;
-    }
-  },
-});
-
-// OAuth discovery endpoint tool
-server.addTool({
-  name: 'getOAuthDiscovery',
-  description: 'Get OAuth 2.1 discovery information',
-  parameters: z.object({}),
-  annotations: {
-    openWorldHint: false,
-    readOnlyHint: true,
-    title: 'OAuth Discovery',
-  },
-  execute: async () => {
-    const discovery = {
-      issuer: `http://localhost:${PORT}`,
-      authorization_endpoint: `http://localhost:${PORT}/oauth/authorize`,
-      token_endpoint: `http://localhost:${PORT}/oauth/token`,
-      registration_endpoint: `http://localhost:${PORT}/oauth/register`,
-      introspection_endpoint: `http://localhost:${PORT}/oauth/introspect`,
-      revocation_endpoint: `http://localhost:${PORT}/oauth/revoke`,
-      scopes_supported: ['read', 'write', 'admin'],
-      response_types_supported: ['code'],
-      grant_types_supported: ['authorization_code', 'refresh_token'],
-      code_challenge_methods_supported: ['S256', 'plain'],
-      token_endpoint_auth_methods_supported: [
-        'client_secret_basic',
-        'client_secret_post',
-      ],
-    };
-
-    return JSON.stringify(discovery, null, 2);
-  },
-});
-
-// OAuth client registration tool
-server.addTool({
-  name: 'registerOAuthClient',
-  description: 'Register a new OAuth client',
-  parameters: z.object({
-    clientName: z.string().describe('Name of the client application'),
-    redirectUris: z.array(z.string()).describe('Allowed redirect URIs'),
-    scopes: z
-      .array(z.string())
-      .optional()
-      .default(['read'])
-      .describe('Requested scopes'),
-  }),
-  annotations: {
-    openWorldHint: false,
-    readOnlyHint: false,
-    title: 'Client Registration',
-  },
-  execute: async (args) => {
-    const clientId = `client-${generateRandomString(16)}`;
-    const clientSecret = generateRandomString(32);
-
-    const client: OAuthClient = {
-      id: clientId,
-      name: args.clientName,
-      redirectUris: args.redirectUris,
-      scopes: args.scopes || ['read'],
-      createdAt: new Date(),
-    };
-
-    clients.set(clientId, client);
-
-    return `Client registered successfully!
-
-Client ID: ${clientId}
-Client Secret: ${clientSecret}
-Client Name: ${args.clientName}
-Redirect URIs: ${args.redirectUris.join(', ')}
-Allowed Scopes: ${client.scopes.join(', ')}
-Created: ${client.createdAt.toISOString()}
-
-Store the client secret securely - it won't be shown again!`;
-  },
-});
-
-// Start authorization flow
-server.addTool({
-  name: 'startOAuthFlow',
-  description: 'Start OAuth 2.1 authorization flow with PKCE',
-  parameters: z.object({
-    clientId: z.string().describe('OAuth client ID'),
-    redirectUri: z.string().describe('Redirect URI'),
-    scopes: z
-      .array(z.string())
-      .optional()
-      .default(['read'])
-      .describe('Requested scopes'),
-    codeChallenge: z.string().describe('PKCE code challenge (S256)'),
-    codeChallengeMethod: z
-      .string()
-      .default('S256')
-      .describe('PKCE code challenge method'),
-  }),
-  annotations: {
-    openWorldHint: false,
-    readOnlyHint: false,
-    title: 'Start OAuth Flow',
-  },
-  execute: async (args) => {
-    const client = clients.get(args.clientId);
-    if (!client) {
-      return 'Error: Invalid client ID';
+    case 'POST /register': {
+      const result = provider.register(await readJson(request));
+      return json('error' in result ? 400 : 201, result);
     }
 
-    if (!client.redirectUris.includes(args.redirectUri)) {
-      return 'Error: Invalid redirect URI';
+    case 'GET /authorize': {
+      const result = await provider.authorize(Object.fromEntries(url.searchParams));
+      return json('error' in result ? 400 : 200, result);
     }
 
-    // In a real implementation, this would redirect to a login page
-    // For demo purposes, we'll simulate user login
-    const authCode = generateRandomString(32);
-    const authCodeData: AuthorizationCode = {
-      code: authCode,
-      clientId: args.clientId,
-      codeChallenge: args.codeChallenge,
-      codeChallengeMethod: args.codeChallengeMethod,
-      redirectUri: args.redirectUri,
-      scopes: args.scopes || ['read'],
-      userId: demoUser.id, // Demo: auto-login as demo user
-      expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
-    };
-
-    authCodes.set(authCode, authCodeData);
-
-    return `Authorization flow started!
-
-Authorization Code: ${authCode}
-Expires in: 10 minutes
-User: ${demoUser.username} (auto-logged in for demo)
-
-Next: Exchange this code for an access token using the 'exchangeAuthCode' tool.
-`;
-  },
-});
-
-// Exchange authorization code for access token
-server.addTool({
-  name: 'exchangeAuthCode',
-  description: 'Exchange authorization code for access token',
-  parameters: z.object({
-    code: z.string().describe('Authorization code'),
-    clientId: z.string().describe('OAuth client ID'),
-    codeVerifier: z.string().describe('PKCE code verifier'),
-    redirectUri: z.string().describe('Redirect URI (must match)'),
-  }),
-  annotations: {
-    openWorldHint: false,
-    readOnlyHint: false,
-    title: 'Exchange Auth Code',
-  },
-  execute: async (args) => {
-    const authCodeData = authCodes.get(args.code);
-    if (!authCodeData || authCodeData.expiresAt < new Date()) {
-      return 'Error: Invalid or expired authorization code';
+    case 'POST /consent': {
+      const result = provider.consent(await readJson(request));
+      return json('error' in result ? 400 : 200, result);
     }
 
-    if (authCodeData.clientId !== args.clientId) {
-      return 'Error: Client ID mismatch';
+    case 'POST /token': {
+      const raw = await readBody(request);
+      const params = Object.fromEntries(new URLSearchParams(raw));
+      const result = await provider.token(params);
+      return json('error' in result ? 400 : 200, result);
     }
 
-    if (authCodeData.redirectUri !== args.redirectUri) {
-      return 'Error: Redirect URI mismatch';
-    }
-
-    if (
-      !verifyCodeChallenge(
-        args.codeVerifier,
-        authCodeData.codeChallenge,
-        authCodeData.codeChallengeMethod,
-      )
-    ) {
-      return 'Error: PKCE verification failed';
-    }
-
-    // Generate access token
-    const tokenData = generateAccessToken(
-      args.clientId,
-      authCodeData.userId,
-      authCodeData.scopes,
-    );
-
-    // Clean up used authorization code
-    authCodes.delete(args.code);
-
-    return `Access token generated successfully!
-
-Access Token: ${tokenData.token}
-Token Type: Bearer
-Expires In: 3600 seconds
-Refresh Token: ${tokenData.refreshToken}
-Scopes: ${tokenData.scopes.join(' ')}
-
-Use this access token to access protected resources.`;
-  },
-});
-
-// Token introspection
-server.addTool({
-  name: 'introspectToken',
-  description: 'Introspect an access token (RFC 7662)',
-  parameters: z.object({
-    token: z.string().describe('Access token to introspect'),
-  }),
-  annotations: {
-    openWorldHint: false,
-    readOnlyHint: true,
-    title: 'Token Introspection',
-  },
-  execute: async (args) => {
-    const tokenData = accessTokens.get(args.token);
-    if (!tokenData || tokenData.expiresAt < new Date()) {
-      return JSON.stringify({ active: false });
-    }
-
-    try {
-      const decoded = jwt.verify(args.token, JWT_SECRET) as {
-        exp: number;
-        iat: number;
-      };
-      return JSON.stringify(
-        {
-          active: true,
-          client_id: tokenData.clientId,
-          sub: tokenData.userId,
-          scopes: tokenData.scopes,
-          exp: decoded.exp,
-          iat: decoded.iat,
-          token_type: 'Bearer',
-        },
-        null,
-        2,
-      );
-    } catch {
-      return JSON.stringify({ active: false });
-    }
-  },
-});
-
-// Token revocation
-server.addTool({
-  name: 'revokeToken',
-  description: 'Revoke an access or refresh token (RFC 7009)',
-  parameters: z.object({
-    token: z.string().describe('Token to revoke'),
-  }),
-  annotations: {
-    openWorldHint: false,
-    readOnlyHint: false,
-    title: 'Token Revocation',
-  },
-  execute: async (args) => {
-    const tokenData = accessTokens.get(args.token);
-    if (tokenData) {
-      accessTokens.delete(args.token);
-      return 'Token revoked successfully';
-    }
-
-    // Check refresh tokens too
-    for (const [accessToken, data] of accessTokens.entries()) {
-      if (data.refreshToken === args.token) {
-        accessTokens.delete(accessToken);
-        return 'Refresh token revoked successfully';
-      }
-    }
-
-    return 'Token not found or already revoked';
-  },
-});
-
-// Demo PKCE helper
-server.addTool({
-  name: 'generatePKCE',
-  description: 'Generate PKCE code verifier and challenge for testing',
-  parameters: z.object({}),
-  annotations: {
-    openWorldHint: false,
-    readOnlyHint: true,
-    title: 'Generate PKCE',
-  },
-  execute: async () => {
-    const codeVerifier = generateRandomString(32);
-    const codeChallenge = crypto
-      .createHash('sha256')
-      .update(codeVerifier)
-      .digest('base64url');
-
-    return `PKCE Parameters Generated:
-
-Code Verifier: ${codeVerifier}
-Code Challenge: ${codeChallenge}
-Code Challenge Method: S256
-
-Use these values in your OAuth flow:
-1. Use the code challenge in 'startOAuthFlow'
-2. Use the code verifier in 'exchangeAuthCode'`;
-  },
-});
-
-// Event handlers
-server.on('connect', () => {
-  console.log('🔗 Client connected to OAuth server');
-});
-
-server.on('disconnect', () => {
-  console.log('❌ Client disconnected from OAuth server');
-});
-
-// Start the server
-const startServer = async () => {
-  try {
-    console.log(`🚀 Starting OAuth 2.1 MCP Server...`);
-    console.log(`   Port: ${PORT}`);
-    console.log(`   Demo Client ID: ${demoClient.id}`);
-    console.log(`   Demo User: ${demoUser.username} / ${demoUser.password}`);
-
-    await server.start({
-      transportType: 'httpStream',
-      httpStream: {
-        port: PORT,
-      },
-    });
-
-    console.log(`✅ OAuth MCP Server running on port ${PORT}`);
-    console.log(`📡 MCP Endpoint: http://localhost:${PORT}/mcp`);
-    console.log(`🔍 Test with: pnpm inspect:09`);
-    console.log(`\n🔐 OAuth 2.1 Features Available:`);
-    console.log(`   • Client Registration`);
-    console.log(`   • PKCE Authorization Flow`);
-    console.log(`   • Token Exchange`);
-    console.log(`   • Token Introspection`);
-    console.log(`   • Token Revocation`);
-    console.log(`   • Discovery Endpoint`);
-  } catch (error) {
-    console.error('❌ Failed to start OAuth server:', error);
-    throw error;
+    default:
+      return false;
   }
-};
+}
 
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  console.log('🛑 Received SIGTERM, shutting down gracefully...');
-  await server.stop();
-  console.log('✅ OAuth server shut down successfully');
-  process.exit(0);
-});
+if (isEntrypoint(import.meta.url)) {
+  await serveHttp((ctx) => buildServer(ctx.authInfo), PORT, { routes, authenticate });
+  console.log('\n🔐 OAuth 2.1 MCP server');
+  console.log(`   resource   ${RESOURCE}`);
+  console.log(`   metadata   ${BASE_URL}/.well-known/oauth-protected-resource`);
+  console.log(`   endpoint   ${BASE_URL}/mcp`);
+  console.log(`   AS meta    ${BASE_URL}/.well-known/openid-configuration (OIDC only — 8414 404s)`);
+  console.log('   scopes     search_docs=read, update_doc=write, enforced at the gate from Mcp-Name');
+  console.log('   hardening  RFC 9207 iss, application_type, issuer-bound client_id, CIMD\n');
+}
 
-process.on('SIGINT', async () => {
-  console.log('🛑 Received SIGINT, shutting down gracefully...');
-  await server.stop();
-  console.log('✅ OAuth server shut down successfully');
-  process.exit(0);
-});
+async function readBody(request: IncomingMessage): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of request) chunks.push(chunk as Buffer);
+  return Buffer.concat(chunks).toString('utf8');
+}
 
-// Start the server
-startServer().catch(console.error);
+async function readJson(request: IncomingMessage): Promise<Record<string, unknown>> {
+  try {
+    return JSON.parse(await readBody(request)) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+/** requireBearerAuth takes a web-standard Request; it only reads headers. */
+function toWebRequest(request: IncomingMessage): Request {
+  const headers = new Headers();
+  for (const [name, value] of Object.entries(request.headers)) {
+    if (typeof value === 'string') headers.set(name, value);
+  }
+  return new Request(new URL(request.url ?? '/', BASE_URL), { method: 'GET', headers });
+}

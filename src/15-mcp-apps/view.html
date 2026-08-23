@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Sales dashboard</title>
+    <style>
+      /* Hosts publish CSS custom properties. Always supply a fallback: you
+         are rendering inside somebody else's design system, and inside an
+         iframe that may load before the theme arrives. */
+      body {
+        margin: 0;
+        padding: 16px;
+        font: 14px/1.5 var(--font-family-base, system-ui, sans-serif);
+        background: var(--color-background-primary, #fff);
+        color: var(--color-text-primary, #111);
+      }
+      h1 { font-size: 15px; margin: 0 0 12px; font-weight: 600; }
+      .row { display: grid; grid-template-columns: 64px 1fr 88px; align-items: center; gap: 8px; margin-bottom: 6px; }
+      .bar { height: 14px; border-radius: 3px; background: var(--color-accent-primary, #3b82f6); }
+      .value { text-align: right; font-variant-numeric: tabular-nums; }
+      button {
+        margin-top: 12px; padding: 6px 12px; border-radius: 6px; cursor: pointer;
+        border: 1px solid var(--color-border-primary, #d4d4d8);
+        background: var(--color-background-secondary, #f4f4f5);
+        color: inherit; font: inherit;
+      }
+      footer { margin-top: 12px; font-size: 12px; opacity: 0.65; }
+    </style>
+  </head>
+  <body>
+    <h1 id="heading">Loading…</h1>
+    <div id="chart"></div>
+    <button id="refresh">Next quarter</button>
+    <footer id="status"></footer>
+
+    <script type="module">
+      // The View talks JSON-RPC to the host over postMessage. No SDK: the
+      // spec shows this exact shape, and it keeps the wire visible.
+      // Production apps use @modelcontextprotocol/ext-apps plus a bundler.
+
+      let nextId = 1;
+      const pending = new Map();
+
+      window.addEventListener('message', (event) => {
+        const message = event.data;
+        if (!message || message.jsonrpc !== '2.0') return;
+
+        if (message.id !== undefined && pending.has(message.id)) {
+          const { resolve, reject } = pending.get(message.id);
+          pending.delete(message.id);
+          if (message.error) reject(new Error(message.error.message));
+          else resolve(message.result);
+          return;
+        }
+
+        if (message.method) handleNotification(message);
+      });
+
+      function request(method, params) {
+        const id = nextId++;
+        // '*' because the host frames us with an opaque origin. The host
+        // checks `event.source`; that is what makes this auditable.
+        window.parent.postMessage({ jsonrpc: '2.0', id, method, params }, '*');
+        return new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
+      }
+
+      function notify(method, params) {
+        window.parent.postMessage({ jsonrpc: '2.0', method, params }, '*');
+      }
+
+      function handleNotification({ method, params }) {
+        // The tool's arguments arrive first, then its result. Render on the
+        // result; use the input to show a spinner if the call is slow.
+        if (method === 'ui/notifications/tool-result') render(params?.result?.structuredContent);
+        if (method === 'ui/notifications/host-context-changed') applyTheme(params?.hostContext);
+      }
+
+      function applyTheme(context) {
+        if (context?.theme) document.documentElement.dataset.theme = context.theme;
+      }
+
+      function render(data) {
+        if (!data) return;
+        document.getElementById('heading').textContent =
+          `Q${data.quarter} revenue — £${data.total.toLocaleString('en-GB')}`;
+
+        const peak = Math.max(...data.rows.map((row) => row.revenue));
+        document.getElementById('chart').innerHTML = data.rows
+          .map(
+            (row) => `<div class="row">
+                <span>${row.region}</span>
+                <span class="bar" style="width:${Math.round((row.revenue / peak) * 100)}%"></span>
+                <span class="value">£${row.revenue.toLocaleString('en-GB')}</span>
+              </div>`,
+          )
+          .join('');
+
+        // Views are sized by their content. Tell the host what you need and
+        // let it decide whether to grant it.
+        notify('ui/notifications/size-changed', { height: document.body.scrollHeight });
+      }
+
+      document.getElementById('refresh').addEventListener('click', async () => {
+        // An app-only tool. The model never sees `refresh_sales`, so this
+        // button costs nothing in the agent's context window.
+        const result = await request('tools/call', { name: 'refresh_sales', arguments: {} });
+        render(result.structuredContent);
+        // Tell the conversation what the user did, so the model's picture of
+        // the world does not go stale behind the UI.
+        notify('ui/update-model-context', { text: `User advanced the dashboard to Q${result.structuredContent.quarter}.` });
+      });
+
+      // Lifecycle: initialize, learn the environment, then announce we are
+      // ready. The host sends nothing before that notification arrives.
+      const initialized = await request('ui/initialize', {
+        appInfo: { name: 'Sales dashboard', version: '1.0.0' },
+        capabilities: {},
+      });
+      applyTheme(initialized?.hostContext);
+      notify('ui/notifications/initialized', {});
+
+      document.getElementById('status').textContent =
+        `host: ${initialized?.hostInfo?.name ?? 'unknown'} · display: ${initialized?.hostContext?.displayMode ?? 'inline'}`;
+    </script>
+  </body>
+</html>

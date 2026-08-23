@@ -1,273 +1,138 @@
-import { FastMCP } from 'fastmcp';
+import { timingSafeEqual } from 'node:crypto';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import { McpServer, type AuthInfo } from '@modelcontextprotocol/server';
 import { z } from 'zod';
-import { BOB_API_KEY, ALICE_API_KEY, PORT } from './constants';
+import { isEntrypoint } from '../shared/entrypoint';
+import { banner, serveHttp } from '../shared/serve';
+import { API_KEYS, PORT } from './constants';
 
-interface Transaction {
-  id: number;
-  from: string;
-  to: string;
-  amount: number;
-  date: string;
-}
+/**
+ * The simplest auth that is still auth: a bearer key, checked at the edge,
+ * turned into an identity the tools can see.
+ *
+ * Two things carry over unchanged to module 09's OAuth:
+ *
+ *   1. The SDK verifies nothing. `authenticate` runs *before* the handler and
+ *      whatever it returns arrives at the factory as `ctx.authInfo`.
+ *   2. Because there is no session on 2026-07-28, the identity is established
+ *      per request. There is no "authenticated connection" to leak between
+ *      callers — the factory closes over one verified caller and is discarded.
+ */
 
-interface ApiKey {
-  id: string;
-  key: string;
-  userId: number;
-  username: string;
-  role: string;
-  name: string;
-  created_at: string;
-}
-
-interface ApiKeySession extends Record<string, unknown> {
-  userId: number;
-  username: string;
-  role: string;
-  apiKeyId: string;
-  apiKeyName: string;
-}
-
-const DEMO_API_KEYS: ApiKey[] = [
-  {
-    id: '1',
-    key: BOB_API_KEY,
-    userId: 1,
-    username: 'bob',
-    role: 'customer',
-    name: 'Bob Personal Key',
-    created_at: '2024-01-01T00:00:00Z',
-  },
-  {
-    id: '2',
-    key: ALICE_API_KEY,
-    userId: 3,
-    username: 'alice',
-    role: 'customer',
-    name: 'Alice Personal Key',
-    created_at: '2024-01-15T00:00:00Z',
-  },
-  {
-    id: '3',
-    key: 'x',
-    userId: 3,
-    username: 'charlie',
-    role: 'customer',
-    name: 'Charlie Personal Key',
-    created_at: '2024-01-15T00:00:00Z',
-  },
-];
-
-function verifyApiKey(apiKey: string): {
-  valid: boolean;
-  user?: ApiKey;
-  error?: string;
-} {
-  const user = DEMO_API_KEYS.find((key) => key.key === apiKey);
-  if (!user) {
-    return { valid: false, error: 'Invalid API key' };
+/** Constant-time compare so the key can't be recovered a byte at a time. */
+function lookupKey(presented: string): (typeof API_KEYS)[string] | undefined {
+  const candidate = Buffer.from(presented);
+  for (const [key, identity] of Object.entries(API_KEYS)) {
+    const known = Buffer.from(key);
+    if (known.length === candidate.length && timingSafeEqual(known, candidate)) return identity;
   }
-  return { valid: true, user };
+  return undefined;
 }
 
-const transactions: Transaction[] = [
-  // Bob's transactions
-  { id: 1, from: 'bob', to: 'alice', amount: 100, date: '2024-03-15' },
-  { id: 3, from: 'bob', to: 'charlie', amount: 75, date: '2024-03-17' },
-  { id: 5, from: 'bob', to: 'alice', amount: 200, date: '2024-03-19' },
-  // Alice's transactions
-  { id: 2, from: 'alice', to: 'charlie', amount: 50, date: '2024-03-16' },
-  { id: 6, from: 'alice', to: 'bob', amount: 150, date: '2024-03-20' },
-  // Charlie's transactions
-  { id: 4, from: 'charlie', to: 'bob', amount: 25, date: '2024-03-18' },
-  { id: 7, from: 'charlie', to: 'alice', amount: 80, date: '2024-03-21' },
-];
+export async function authenticate(
+  request: IncomingMessage,
+  response: ServerResponse,
+): Promise<AuthInfo | undefined> {
+  const header = request.headers.authorization ?? '';
+  const presented = header.startsWith('Bearer ') ? header.slice(7) : '';
+  const identity = presented ? lookupKey(presented) : undefined;
 
-const server = new FastMCP({
-  name: 'payment-server',
-  version: '1.0.0',
-  instructions: `
-This is a payment transaction server that manages user payment history.
-  `.trim(),
-  authenticate: async (request) => {
-    const apiKey = request.headers['x-api-key'];
+  if (!identity) {
+    response
+      .writeHead(401, {
+        'content-type': 'application/json',
+        'www-authenticate': 'Bearer error="invalid_token"',
+      })
+      .end(JSON.stringify({ error: 'invalid_token' }));
+    return undefined;
+  }
 
-    if (!apiKey || Array.isArray(apiKey)) {
-      throw new Response(null, {
-        status: 401,
-        statusText: 'Unauthorized - API key required in x-api-key header',
-      });
-    }
+  return {
+    token: presented,
+    clientId: identity.userId,
+    scopes: identity.scopes,
+    // API keys don't expire on their own; the SDK wants the field present.
+    expiresAt: Math.floor(Date.now() / 1000) + 3600,
+  };
+}
 
-    const auth = verifyApiKey(apiKey);
-    if (!auth.valid || !auth.user) {
-      throw new Response(null, {
-        status: 401,
-        statusText: auth.error || 'Invalid API key',
-      });
-    }
+/** Per-tool scope guard. The SDK has no idea what a scope is — this is yours. */
+const requireScope = (auth: AuthInfo | undefined, scope: string) =>
+  auth?.scopes.includes(scope)
+    ? undefined
+    : {
+        isError: true as const,
+        content: [{ type: 'text' as const, text: `missing scope: ${scope}` }],
+      };
 
-    return {
-      userId: auth.user.userId,
-      username: auth.user.username,
-      role: auth.user.role,
-      apiKeyId: auth.user.id,
-      apiKeyName: auth.user.name,
-    } as ApiKeySession;
-  },
-});
+const notes = new Map<string, string[]>();
 
-// Event handlers
-server.on('connect', (event) => {
-  console.log('Client connected:', event.session);
-});
+export function buildServer(authInfo: AuthInfo | undefined) {
+  const who = authInfo?.clientId ?? 'anonymous';
+  const server = new McpServer(
+    { name: 'api-key-server', version: '2.0.0' },
+    { capabilities: { tools: {} } },
+  );
 
-server.on('disconnect', (event) => {
-  console.log('Client disconnected:', event.session);
-});
+  server.registerTool(
+    'whoami',
+    {
+      title: 'Who am I',
+      description: 'Report the identity behind the presented API key',
+      inputSchema: z.object({}),
+      annotations: { readOnlyHint: true },
+    },
+    async () => ({
+      content: [
+        { type: 'text', text: `You are ${who} with scopes: ${authInfo?.scopes.join(', ') ?? 'none'}` },
+      ],
+    }),
+  );
 
-// Tool: Get all transactions
-server.addTool({
-  name: 'getAuthenticatedUserTransactions',
-  description:
-    'Get a list of all transactions for the authenticated user (both sent and received)',
-  parameters: z.object({}),
-  annotations: {
-    readOnlyHint: true,
-  },
-  execute: async (_, { session }) => {
-    if (!session) {
-      throw new Error('Authentication required');
-    }
+  server.registerTool(
+    'listNotes',
+    {
+      title: 'List notes',
+      description: 'List your own notes',
+      inputSchema: z.object({}),
+      annotations: { readOnlyHint: true },
+    },
+    async () => {
+      const denied = requireScope(authInfo, 'read');
+      if (denied) return denied;
+      // Scoped to the caller: a tool can only ever see its own caller's data,
+      // because the instance was built for this request only.
+      const mine = notes.get(who) ?? [];
+      return { content: [{ type: 'text', text: mine.length ? mine.join('\n') : '(no notes yet)' }] };
+    },
+  );
 
-    // Only return transactions related to the authenticated user
-    const userTransactions = transactions.filter(
-      (t) =>
-        t.from === session.username.toLowerCase() ||
-        t.to === session.username.toLowerCase(),
-    );
+  server.registerTool(
+    'addNote',
+    {
+      title: 'Add note',
+      description: 'Append a note to your own list (requires the write scope)',
+      inputSchema: z.object({ text: z.string().describe('Note body') }),
+      annotations: { readOnlyHint: false },
+    },
+    async ({ text }) => {
+      const denied = requireScope(authInfo, 'write');
+      if (denied) return denied;
+      const mine = notes.get(who) ?? [];
+      mine.push(text);
+      notes.set(who, mine);
+      return { content: [{ type: 'text', text: `Saved. You now have ${mine.length} note(s).` }] };
+    },
+  );
 
-    if (userTransactions.length === 0) {
-      throw new Error(`No transactions found for user ${session.username}`);
-    }
+  return server;
+}
 
-    return JSON.stringify(userTransactions, null, 2);
-  },
-});
+if (isEntrypoint(import.meta.url)) {
+  await serveHttp((ctx) => buildServer(ctx.authInfo), PORT, { authenticate });
 
-// Tool: Get latest transactions
-server.addTool({
-  name: 'getLatestTransactions',
-  description: 'Get the latest transactions for the authenticated user',
-  parameters: z.object({
-    limit: z
-      .number()
-      .optional()
-      .default(3)
-      .describe('Number of latest transactions to return'),
-  }),
-  annotations: {
-    readOnlyHint: true,
-  },
-  execute: async (args, { session }) => {
-    if (!session) {
-      throw new Error('Authentication required');
-    }
-
-    const userTransactions = transactions
-      .filter(
-        (t) =>
-          t.from === session.username.toLowerCase() ||
-          t.to === session.username.toLowerCase(),
-      )
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .slice(0, args.limit);
-
-    if (userTransactions.length === 0) {
-      throw new Error(`No transactions found for user ${session.username}`);
-    }
-
-    return JSON.stringify(userTransactions, null, 2);
-  },
-});
-
-// Add a new tool to get account balance
-server.addTool({
-  name: 'getAccountBalance',
-  description: 'Get the current account balance for the authenticated user',
-  parameters: z.object({}),
-  annotations: {
-    readOnlyHint: true,
-  },
-  execute: async (_, { session }) => {
-    if (!session) {
-      throw new Error('Authentication required');
-    }
-
-    let balance = 0;
-    transactions.forEach((t) => {
-      if (t.from === session.username.toLowerCase()) {
-        balance -= t.amount; // Sent money (debit)
-      }
-      if (t.to === session.username.toLowerCase()) {
-        balance += t.amount; // Received money (credit)
-      }
-    });
-
-    return JSON.stringify({ username: session.username, balance }, null, 2);
-  },
-});
-
-// Tool: Transfer funds (Conceptual - does not modify data in this example)
-server.addTool({
-  name: 'transferFunds',
-  description: 'Transfer funds from the authenticated user to another user.',
-  parameters: z.object({
-    toUsername: z.string().describe('The username of the recipient.'),
-    amount: z.number().positive().describe('The amount to transfer.'),
-  }),
-  // No readOnlyHint, as this would be a write operation
-  execute: async (args, { session }) => {
-    if (!session) {
-      throw new Error('Authentication required');
-    }
-
-    // In a real application, you would:
-    // 1. Validate if session.username has sufficient funds.
-    // 2. Validate if args.toUsername is a valid user.
-    // 3. Create a new transaction record.
-    // 4. Update balances.
-    // 5. Potentially use a database transaction for atomicity.
-
-    console.log(
-      `[Payment Server] Conceptual transferFunds call from ${session.username} to ${args.toUsername} for ${args.amount}`,
-    );
-
-    // For this example, we'll just return a success message.
-    return JSON.stringify(
-      {
-        success: true,
-        message: `Conceptual transfer of ${args.amount} from ${session.username} to ${args.toUsername} initiated.`,
-        details: {
-          from: session.username,
-          to: args.toUsername,
-          amount: args.amount,
-          status: 'conceptual_success',
-        },
-      },
-      null,
-      2,
-    );
-  },
-});
-
-// Start server with HTTP Stream transport
-server.start({
-  transportType: 'httpStream',
-  httpStream: {
-    port: PORT,
-  },
-});
-
-console.log(`💰 Payment MCP Server running on port ${PORT}`);
-console.log(`📡 Connect via: http://localhost:${PORT}/stream`);
+  banner('🔑 API-key MCP server', PORT, [
+    'auth      Authorization: Bearer <key>',
+    'identity  Bob = read+write, Alice = read only',
+  ]);
+}

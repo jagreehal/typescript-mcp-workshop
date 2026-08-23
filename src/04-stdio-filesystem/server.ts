@@ -1,103 +1,100 @@
-import { FastMCP } from 'fastmcp';
+import { readdir, readFile, stat } from 'node:fs/promises';
+import { isAbsolute, join, relative, resolve } from 'node:path';
+import { McpServer } from '@modelcontextprotocol/server';
+import { serveStdio } from '@modelcontextprotocol/server/stdio';
+import { isEntrypoint } from '../shared/entrypoint';
 import { z } from 'zod';
-import fs from 'fs/promises';
-import path from 'path';
 
-const server = new FastMCP({
-  name: 'FileSystem',
-  version: '1.0.0',
-});
+/**
+ * A stdio server: no HTTP, no ports, no auth. The client spawns this process
+ * and talks over its stdin/stdout, so the OS process boundary IS the security
+ * boundary. This is how local MCP servers (filesystem, git, databases) ship.
+ *
+ * NOTHING may be written to stdout except protocol frames — a stray
+ * `console.log` corrupts the stream. Log to stderr.
+ */
 
-server.on('connect', (event) => {
-  console.log('Client connected:', JSON.stringify(event.session, null, 2));
-});
+// A filesystem server without a root is a file exfiltration tool. The root is
+// the whole security model here: one containment check, applied to every path,
+// before any I/O happens.
+const ROOT = resolve(process.env.MCP_FS_ROOT ?? process.cwd());
 
-server.on('disconnect', (event) => {
-  console.log('Client disconnected:', JSON.stringify(event.session, null, 2));
-});
-
-// Tool: List directory contents
-server.addTool({
-  name: 'listDirectory',
-  description: 'List contents of a directory',
-  parameters: z.object({
-    path: z.string().describe('Directory path to list'),
-  }),
-  annotations: {
-    readOnlyHint: true,
-  },
-  execute: async (args): Promise<string> => {
-    try {
-      const dirPath = path.resolve(args.path);
-      const items = await fs.readdir(dirPath, { withFileTypes: true });
-
-      const result = items.map((item) => ({
-        name: item.name,
-        type: item.isDirectory() ? 'directory' : 'file',
-        path: path.join(dirPath, item.name),
-      }));
-
-      return JSON.stringify(result, null, 2);
-    } catch (error) {
-      return `Error listing directory: ${error instanceof Error ? error.message : 'Unknown error'}`;
-    }
-  },
-});
-
-// Tool: Read file contents
-server.addTool({
-  name: 'readFile',
-  description: 'Read contents of a file',
-  parameters: z.object({
-    path: z.string().describe('File path to read'),
-  }),
-  annotations: {
-    readOnlyHint: true,
-  },
-  execute: async (args): Promise<string> => {
-    try {
-      const filePath = path.resolve(args.path);
-      const content = await fs.readFile(filePath, 'utf-8');
-      return content;
-    } catch (error) {
-      return `Error reading file: ${error instanceof Error ? error.message : 'Unknown error'}`;
-    }
-  },
-});
-
-// Start server with stdio transport
-const startServer = async () => {
-  try {
-    console.log('🚀 Starting File System MCP Server...');
-    console.log('   Transport: STDIO');
-
-    await server.start({
-      transportType: 'stdio',
-    });
-
-    console.log('✅ File System MCP Server started with stdio transport');
-    console.log('📡 Ready for stdio communication');
-    console.log('🗂️  Features: listDirectory, readFile');
-  } catch (error) {
-    console.error('❌ Failed to start filesystem server:', error);
-    throw error;
+function resolveWithinRoot(candidate: string): string {
+  const target = resolve(ROOT, candidate);
+  const offset = relative(ROOT, target);
+  if (offset.startsWith('..') || isAbsolute(offset)) {
+    throw new Error(`Path escapes the server root: ${candidate}`);
   }
-};
+  return target;
+}
 
-// Graceful shutdown handling
-process.on('SIGTERM', async () => {
-  console.log('🛑 Received SIGTERM, shutting down gracefully...');
-  await server.stop();
-  console.log('✅ Filesystem server shut down successfully');
-  process.exit(0);
-});
+export function buildServer() {
+  const server = new McpServer(
+    { name: 'filesystem', version: '2.0.0' },
+    { capabilities: { tools: {} } },
+  );
 
-process.on('SIGINT', async () => {
-  console.log('🛑 Received SIGINT, shutting down gracefully...');
-  await server.stop();
-  console.log('✅ Filesystem server shut down successfully');
-  process.exit(0);
-});
+  server.registerTool(
+    'listDirectory',
+    {
+      title: 'List directory',
+      description: 'List the contents of a directory, relative to the server root',
+      inputSchema: z.object({ path: z.string().default('.').describe('Directory path') }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ path }) => {
+      try {
+        const directory = resolveWithinRoot(path);
+        const entries = await readdir(directory, { withFileTypes: true });
+        const listing = entries.map((entry) => ({
+          name: entry.name,
+          type: entry.isDirectory() ? 'directory' : 'file',
+          path: relative(ROOT, join(directory, entry.name)),
+        }));
+        return { content: [{ type: 'text', text: JSON.stringify(listing, null, 2) }] };
+      } catch (error) {
+        return { isError: true, content: [{ type: 'text', text: message(error) }] };
+      }
+    },
+  );
 
-// Start the server
-startServer().catch(console.error);
+  server.registerTool(
+    'readFile',
+    {
+      title: 'Read file',
+      description: 'Read a UTF-8 file, relative to the server root',
+      inputSchema: z.object({ path: z.string().describe('File path') }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ path }) => {
+      try {
+        const file = resolveWithinRoot(path);
+        const info = await stat(file);
+        if (info.size > 256 * 1024) {
+          return {
+            isError: true,
+            content: [{ type: 'text', text: `File too large (${info.size} bytes); limit is 256KB.` }],
+          };
+        }
+        return { content: [{ type: 'text', text: await readFile(file, 'utf8') }] };
+      } catch (error) {
+        return { isError: true, content: [{ type: 'text', text: message(error) }] };
+      }
+    },
+  );
+
+  return server;
+}
+
+function message(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+// `serveStdio` is the stdio equivalent of `createMcpHandler`: same factory,
+// both eras. A connection that opens with the 2025 `initialize` handshake stays
+// pinned to that era for its lifetime.
+if (isEntrypoint(import.meta.url)) {
+  serveStdio(buildServer, { onerror: (error) => console.error('[mcp]', error.message) });
+}
+
+console.error(`📁 filesystem MCP server on stdio — root: ${ROOT}`);

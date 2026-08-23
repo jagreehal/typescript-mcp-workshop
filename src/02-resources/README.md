@@ -1,68 +1,173 @@
-# MCP Demo: Resources
+# 02. Resources
 
-## Introduction
+Expose read-only data by URI, with the `ttlMs` / `cacheScope` fields
+2026-07-28 added ([SEP-2549](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2549)).
 
-Context is everything when it comes to intelligent assistants. The Model Context Protocol (MCP) allows you to provide AI with "resources"—structured pieces of information that help it make better decisions and give more relevant answers. This demo explores how to make contextual data available to your AI, so it can be more helpful, accurate, and aware of its environment.
+## You leave able to
 
-Resources are not actions or tools—they are facts, data, or snippets of knowledge the AI can reference. Think of them as the assistant's memory or reference library.
+- Tell resources apart from tools (who initiates, side effects, arguments)
+- Register a concrete resource and a URI template with a `list` callback
+- Set per-resource cache hints without leaking private data into a shared cache
 
-## Why Use Resources?
+## Run
 
-Imagine an AI that knows your name, your preferences, or the current state of your application. By providing resources, you enable the AI to:
+```bash
+pnpm example:02
+```
 
-- Personalise its responses
-- Reference up-to-date information
-- Avoid asking unnecessary questions
-- Make more informed decisions
+No model key required. The client lists, reads, and exercises the volatile URI.
 
-## How It Works: Step by Step
+## Concepts
 
-1. **Resource Definition:** Define resources with clear names and data structures (e.g., user profile, app settings, knowledge base entries).
-2. **Provisioning:** The MCP application makes these resources available—either by fetching from a database, an API, or providing static content.
-3. **AI Access:**
-   - _Implicit_: The resource is automatically included in the AI's context.
-   - _Explicit_: The AI is told about available resources and can request or reference them as needed.
-4. **Contextual Enhancement:** The AI uses the resource to generate more relevant, accurate, or personalised responses.
+**Resources vs tools.** The model decides to call a tool. The client fetches a
+resource by URI: no side effects, no arguments beyond the URI itself. Use a
+resource for context the host or model should read. Use a tool for an action.
 
-## Running the Demo
+**Templates.** `data://metrics/{team}.csv` is one registration covering an
+unbounded family. Supply a `list` callback so concrete URIs appear in
+`resources/list`. Skip `list` and the template still works, but nothing can
+discover the members.
 
-To try out this demo:
+**Cache fields ([SEP-2549](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2549)).** `resources/read` and the list verbs carry `ttlMs`
+and `cacheScope`:
 
-1. Start the server:
-   ```sh
-   pnpm example:server:02
-   ```
-2. In a separate terminal, after a few seconds, run the client:
-   ```sh
-   pnpm example:client:02
-   ```
+| Value | Meaning |
+|---|---|
+| `ttlMs: 0` | Do not cache (default) |
+| `cacheScope: 'private'` | Per client; anything derived from the caller |
+| `cacheScope: 'public'` | Shareable; content that cannot vary by caller |
 
-You should see how resources are made available and used by the AI.
+Set them per resource with `cacheHint`, or per operation with the server's
+`cacheHints` option. The per-resource hint wins, field by field.
 
-## Key MCP Features Demonstrated
+Mark something `'public'` that varies with the caller's identity and a shared
+cache serves one user's data to another. Choose `'private'` when unsure.
 
-- **Resource Concept:** What counts as a resource in MCP.
-- **Provisioning:** How to provide contextual data to the AI.
-- **Contextual Influence:** How resources shape the AI's responses, even without direct tool invocation.
+**Binary content** travels base64-encoded in `blob`, and stays out of `text`.
+For images and audio inside a *tool* result, the typed `ImageContent` and
+`AudioContent` blocks carry the same bytes with a `mimeType` the model can act
+on. A `ResourceLink` points at a resource without inlining it; an
+`EmbeddedResource` carries the contents along. Link when the host can fetch it,
+embed when the model needs it in this turn.
 
-## Best Practices & Guidance
+**Reads throw on failure.** A missing resource raises a protocol error
+instead of returning an `isError` result the way a tool does.
+`volatile://might-fail` fails about a third of the time so you can watch it.
 
-- **Relevance:** Only provide resources that are directly useful for the tasks at hand.
-- **Conciseness:** Keep resources as brief as possible to avoid overwhelming the AI or exceeding context limits.
-- **Freshness:** Ensure dynamic resources (like real-time data) are kept up to date.
-- **Clarity:** Use clear names and descriptions so the AI (and developers) know what each resource is for.
+> **That error code changed.** A missing resource used to be the MCP-specific
+> `-32002`. On 2026-07-28 it is the JSON-RPC standard `-32602` Invalid Params
+> ([SEP-2164](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2164)).
+> A client matching on the literal `-32002` stops recognising it.
 
-## Troubleshooting & Tips
+## Pagination
 
-- If the AI seems unaware of a resource, check that it is correctly defined and included in the context.
-- For sensitive data, ensure resources are only provided to authorised users or sessions.
-- Use resources to reduce repetitive questions—e.g., provide user preferences up front.
+Every list verb is paginated. `listResources()` with no argument walks all the
+pages and hands you the aggregate, bounded by `listMaxPages` (64 by default) so
+a server whose `nextCursor` never advances cannot spin you forever. Against a
+paginating server that is usually what you want.
 
-## Further Reading
+Pass a cursor and you get one raw page instead, uncapped:
 
-- [Model Context Protocol Documentation](https://modelcontextprotocol.org/)
-- [Contextual AI Design](https://yourcompany.com/blog/contextual-ai)
+```ts
+// Page one has no cursor, so the raw path starts with request().
+let page = await client.request({ method: 'resources/list', params: {} });
+while (page.nextCursor) {
+  page = await client.listResources({ cursor: page.nextCursor });
+}
+```
+
+`listResources({ cursor: undefined })` is not the per-page path. The SDK
+branches on the cursor's *value*, so an undefined one takes the aggregating
+walk, which is why page one comes from `request()`.
+
+A cursor is an **opaque server-side handle**. Do not parse one, do not build
+one. It belongs to the same family as [module 08](../08-stateless-core)'s cart
+id, and for the same reason: with no session there is nowhere else to keep your
+position in a list.
+
+### Serving pages is not something `McpServer` does
+
+This demo returns one page, and not because the catalogue is small.
+**`McpServer` has no pagination hook at all.** `registerResource` takes no page
+size, and a template's `list` callback receives only `ctx`, never a cursor. It
+answers `resources/list` with everything, always.
+
+The low-level escape hatch does not reach it either:
+
+```ts
+server.server.setRequestHandler('resources/list', handler);  // registers, never runs
+```
+
+That call is accepted and the handler is never invoked, because `McpServer`
+owns the methods it registered and dispatches to its own. Verified, not
+assumed: put a `console.log` in the handler and nothing prints. The same thing
+happens to `tasks/get` in [module 14](../14-tasks), for the same reason.
+
+So a server that must paginate is built on the low-level `Server` class rather
+than `McpServer`, and assembles its own list:
+
+```ts
+import { Server } from '@modelcontextprotocol/server';
+
+const server = new Server({ name, version }, { capabilities: { resources: {} } });
+
+server.setRequestHandler('resources/list', async (request) => {
+  const start = decodeCursor(request.params?.cursor);       // reject a forged one
+  const page = catalogue.slice(start, start + PAGE_SIZE);
+  return {
+    resources: page,
+    // Absent on the last page. That absence is what ends the client's walk.
+    nextCursor: start + page.length < catalogue.length ? encodeCursor(start + page.length) : undefined,
+  };
+});
+```
+
+You give up `registerResource`, `registerTool` and the rest, and you write the
+`resources/read` dispatch yourself. Worth it when the catalogue is large enough
+that a client on a slow link pays for the whole thing before it can show
+anything, and not before.
+
+Two rules if you go there. Encode a **sort key**, not an offset, so an insert
+does not shift rows a client already walked past. And treat an incoming cursor
+as untrusted input: reject a malformed one with `-32602` rather than silently
+restarting at zero, which is how a client ends up looping over page one
+forever.
+
+## Try this
+
+1. List resources. Confirm the template expands into concrete team URIs.
+2. Read one metrics URI. Note `ttlMs` / `cacheScope` on the result if present.
+3. Hit `volatile://might-fail` a few times until you see `-32602`.
+4. Add `server.server.setRequestHandler('resources/list', …)` with a
+   `console.log` inside it, rerun, and confirm it never fires. That is the
+   constraint above, in ten seconds.
+
+## Stretch
+
+Add `docs://{slug}` with a `list` of two documents and
+`cacheHint: { ttlMs: 60_000, cacheScope: 'public' }`. Mis-set `cacheScope` to
+`'public'` on a URI that embeds a user id, then write one sentence on the leak.
+
+## Related
+
+Cacheable `tools/list` shows up again in [module 11](../11-headers-and-cache).
+Change notifications for lists and URIs are in
+[module 13](../13-subscriptions).
+
+## Files
+
+- [`server.ts`](server.ts): concrete resources, template, volatile failure
+- [`client.ts`](client.ts): list + read loop
+- [`constants.ts`](constants.ts)
+
+<!-- nav -->
 
 ---
 
-By making resources available to your AI, you empower it to act with greater intelligence and relevance. This demo shows how a little context can go a long way in building smarter, more helpful assistants.
+Reference: [specification](https://modelcontextprotocol.io/specification/2026-07-28) ·
+[schema](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/schema/2026-07-28/schema.ts) ·
+[migration](../../docs/migration.md) ·
+[threats](../../docs/security.md) ·
+[SDK notes](../../docs/sdk-notes.md)
+
+[← 01, Tools](../01-tools-only) · [03, Prompts →](../03-prompts)

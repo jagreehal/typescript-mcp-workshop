@@ -1,0 +1,23 @@
+# pnpm 11 reads settings from here, not from a "pnpm" field in package.json.
+
+allowBuilds:
+  '@modelcontextprotocol/inspector': true
+  esbuild: true
+  protobufjs: true
+
+peerDependencyRules:
+  ignoreMissing:
+    # autotel-mcp-instrumentation peers on the v1 monolith (@modelcontextprotocol/sdk).
+    # It duck-types registerTool / callTool, which the v2 packages keep, so it
+    # works against v2 — verified end to end by src/12-observability.
+    - '@modelcontextprotocol/sdk'
+
+# The cooldown exists so a compromised third-party release cannot be pulled
+# straight into a build. These four are published from this account, so the
+# waiting period buys nothing here that is not already known. Everything else
+# still serves its cooldown.
+minimumReleaseAgeExclude:
+  - executable-stories-core
+  - executable-stories-formatters
+  - executable-stories-react
+  - executable-stories-vitest

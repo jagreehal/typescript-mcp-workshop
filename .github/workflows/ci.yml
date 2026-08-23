@@ -17,11 +17,11 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          version: 9.6.0
+          version: 11.18.0
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -34,3 +34,12 @@ jobs:
 
       - name: Lint
         run: pnpm lint
+
+      # Both suites. The stories bind real ports and assert against real
+      # servers, so a broken protocol claim fails the PR rather than shipping
+      # a diagram that lies.
+      - name: Stories
+        run: pnpm test:story
+
+      - name: Unit tests
+        run: pnpm test

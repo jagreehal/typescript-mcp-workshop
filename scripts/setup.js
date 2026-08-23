@@ -93,34 +93,74 @@ function checkPackageManager() {
   return;
 }
 
-// Check Ollama installation
-function checkOllama() {
-  step('Checking Ollama installation...');
+// Check a model is reachable: an API key, or a local Ollama. Either is enough.
+function checkModelAccess() {
+  step('Checking model access...');
 
-  if (!commandExists('ollama')) {
-    error('Ollama not found. Please install it from: https://ollama.ai/');
-    return false;
+  const keys = ['MISTRAL_API_KEY', 'GROQ_API_KEY', 'OPENAI_API_KEY'];
+  let env = '';
+  if (existsSync('.env')) env = readFileSync('.env', 'utf8');
+  const configured = keys.filter(
+    (key) => globalThis.process.env[key] || new RegExp(`^${key}=.+`, 'm').test(env),
+  );
+
+  if (configured.length > 0) {
+    success(`API key(s) found: ${configured.join(', ')} \u2713`);
   }
 
-  const version = getVersion('ollama', '--version');
-  success(`Ollama ${version} ✓`);
-
-  // Check if llama3.2:latest is available
-  try {
-    const models = execSync('ollama list', { encoding: 'utf8' });
-    if (models.includes('qwen3:latest')) {
-      success('llama3.2:latest model available ✓');
-    } else {
-      warning('llama3.2:latest model not found. Installing...');
-      execSync('ollama pull llama3.2:latest', { stdio: 'inherit' });
-      success('llama3.2:latestt model installed ✓');
+  let ollama = false;
+  if (commandExists('ollama')) {
+    try {
+      const models = execSync('ollama list', { encoding: 'utf8' });
+      const installed = ['qwen3:latest', 'llama3.2:latest'].filter((m) => models.includes(m));
+      if (installed.length > 0) {
+        success(`Ollama models available: ${installed.join(', ')} \u2713`);
+      } else {
+        warning('Ollama is running but none of the workshop models are pulled.');
+        info('  Try: ollama pull llama3.2:latest');
+      }
+      ollama = true;
+    } catch {
+      warning('Ollama is installed but not responding. Try: ollama serve');
     }
-  } catch {
-    error('Failed to check Ollama models. Make sure Ollama is running.');
-    info('Try running: ollama serve');
-    return false;
   }
 
+  if (configured.length === 0 && !ollama) {
+    warning('No model configured — set an API key in .env, or install Ollama.');
+    info('  Modules 02, 06, 08, 09, 11 and 12 need no model and will still run.');
+    // Not fatal: most of the workshop exercises the protocol, not a model.
+  }
+
+  info('  Pick your provider in src/model.ts');
+  return true;
+}
+
+// Check the workshop's ports are free. A busy port is worth catching here:
+// on macOS a dual-stack bind can half-succeed and the failure then shows up
+// as a baffling protocol error instead of EADDRINUSE.
+function checkPorts() {
+  step('Checking workshop ports (8082-8096)...');
+
+  const busy = [];
+  for (let port = 8082; port <= 8096; port++) {
+    try {
+      const out = execSync(`lsof -nP -iTCP:${port} -sTCP:LISTEN 2>/dev/null || true`, {
+        encoding: 'utf8',
+      });
+      if (out.trim()) busy.push(port);
+    } catch {
+      // lsof missing (or Windows) — skip the check rather than fail setup.
+      warning('Could not check ports (lsof unavailable) — skipping.');
+      return true;
+    }
+  }
+
+  if (busy.length === 0) {
+    success('All workshop ports are free \u2713');
+  } else {
+    warning(`Ports already in use: ${busy.join(', ')}`);
+    info('  Stop whatever owns them, or change the PORT in that module\'s constants.ts');
+  }
   return true;
 }
 
@@ -134,7 +174,12 @@ function checkTypeScript() {
   }
 
   try {
-    JSON.parse(readFileSync('tsconfig.json', 'utf8'));
+    // tsconfig.json is JSONC — comments are legal there but not in JSON.parse.
+    const raw = readFileSync('tsconfig.json', 'utf8')
+      .split('\n')
+      .filter((line) => !line.trim().startsWith('//'))
+      .join('\n');
+    JSON.parse(raw);
     success('TypeScript configuration valid ✓');
     return true;
   } catch {
@@ -156,8 +201,11 @@ async function main() {
   allGood &= checkNodeVersion();
   const packageManager = checkPackageManager();
   allGood &= packageManager !== undefined;
-  allGood &= checkOllama();
   allGood &= checkTypeScript();
+
+  info('\n\ud83d\udd0d Environment');
+  checkModelAccess();
+  checkPorts();
 
   if (!allGood) {
     error(
