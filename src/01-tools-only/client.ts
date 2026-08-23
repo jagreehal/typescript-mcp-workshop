@@ -1,39 +1,36 @@
+import { generateText, stepCountIs } from 'ai';
+import { mcpTools } from '../shared/ai-tools';
+import { connectWhenReady } from '../shared/connect';
 import { model } from '../model';
-import {
-  experimental_createMCPClient as createMCPClient,
-  generateText,
-} from 'ai';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp';
-import { PORT } from './constants';
+import { MCP_URL } from './constants';
 
-const url = new URL(`http://localhost:${PORT}/mcp`);
-const mcpClient = await createMCPClient({
-  transport: new StreamableHTTPClientTransport(url),
-});
+const client = await connectWhenReady(MCP_URL);
 
-const tools = await mcpClient.tools();
-console.dir(tools, { depth: null });
+// One `tools/list`, mapped to AI SDK tools. The mapping is 20 lines in
+// src/shared/ai-tools.ts — worth reading once, because it is the entire
+// "MCP tools in an agent" story.
+const tools = await mcpTools(client);
+console.log(`🧰 tools: ${Object.keys(tools).join(', ')}\n`);
 
-const calculations = [
+const questions = [
   'What is 25 plus 15?',
   'What is 50 minus 30?',
   'What is 8 multiplied by 6?',
   'What is 100 divided by 4?',
   'What happens if I try to divide by zero?',
-  'Can you show me a series of calculations? First multiply 5 and 3, then add 10 to the result.',
+  'First multiply 5 and 3, then add 10 to the result.',
 ];
 
-console.log('🧮 Testing Calculator Operations:\n');
-
-for (const prompt of calculations) {
-  console.log(`Question: ${prompt}`);
-  const result = await generateText({
+for (const prompt of questions) {
+  console.log(`Q: ${prompt}`);
+  const { text } = await generateText({
     model,
     tools,
     prompt,
-    maxSteps: 10,
+    // Multi-step: the model calls a tool, reads the result, and may call again.
+    stopWhen: stepCountIs(10),
   });
-  console.log(`Answer: ${result.text}\n`);
+  console.log(`A: ${text}\n`);
 }
 
-await mcpClient.close();
+await client.close();

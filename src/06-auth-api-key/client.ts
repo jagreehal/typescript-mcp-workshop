@@ -1,103 +1,44 @@
-import {
-  experimental_createMCPClient as createMCPClient,
-  generateText,
-} from 'ai';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp';
-import { model } from '../model';
-import { BOB_API_KEY, ALICE_API_KEY, PORT } from './constants';
+import { renderContent } from '../shared/ai-tools';
+import { connectWhenReady } from '../shared/connect';
+import { ALICE_API_KEY, BOB_API_KEY, MCP_URL } from './constants';
 
-async function createClient(apiKey: string) {
-  const dbUrl = new URL(`http://localhost:${PORT}/mcp`);
-  return await createMCPClient({
-    transport: new StreamableHTTPClientTransport(dbUrl, {
-      requestInit: {
-        headers: {
-          'x-api-key': apiKey,
-        },
-      },
-    }),
-  });
+/** Three callers, three outcomes: no key, a read-only key, a read+write key. */
+
+console.log('\n1️⃣  No key at all');
+try {
+  await connectWhenReady(MCP_URL, { attempts: 3 });
+  console.log('   ⚠️  connected without a key — that would be the bug');
+} catch (error) {
+  console.log(`   rejected: ${error instanceof Error ? error.message : String(error)}`);
 }
 
-// Define a type for the client returned by createClient
-type MCPClient = Awaited<ReturnType<typeof createClient>>;
+console.log('\n2️⃣  Alice (read only)');
+const alice = await connectWhenReady(MCP_URL, {
+  headers: { Authorization: `Bearer ${ALICE_API_KEY}` },
+});
+await report(alice, 'listNotes', {});
+await report(alice, 'addNote', { text: 'Alice was here' }); // denied: no write scope
+await alice.close();
 
-async function runQuery(client: MCPClient, question: string) {
-  try {
-    const tools = await client.tools();
-    const result = await generateText({
-      model,
-      tools,
-      messages: [
-        {
-          role: 'user',
-          content: question,
-        },
-      ],
-      maxSteps: 20,
-    });
+console.log('\n3️⃣  Bob (read + write)');
+const bob = await connectWhenReady(MCP_URL, {
+  headers: { Authorization: `Bearer ${BOB_API_KEY}` },
+});
+await report(bob, 'whoami', {});
+await report(bob, 'addNote', { text: 'Ship the workshop' });
+await report(bob, 'addNote', { text: 'Then take a break' });
+await report(bob, 'listNotes', {});
+await bob.close();
 
-    if (result.text) {
-      console.log(result.text);
-    } else {
-      console.error('Error: No text in result');
-      if (result.toolCalls && result.toolCalls.length > 0) {
-        result.toolCalls.forEach((tc) => {
-          if (typeof tc === 'object' && tc !== null && 'result' in tc) {
-            const toolCallResult = (
-              tc as { result?: { type?: string; error?: { message: string } } }
-            ).result;
-            if (
-              toolCallResult &&
-              toolCallResult.type === 'error' &&
-              toolCallResult.error
-            ) {
-              console.error(
-                `Tool call error (${tc.toolName}): ${toolCallResult.error.message}`,
-              );
-            }
-          }
-        });
-      }
-      // Potentially log more details from result if needed
-    }
-  } catch (error: unknown) {
-    let errorMessage = 'An unknown error occurred';
-    if (error instanceof Error) {
-      errorMessage = error.message;
-    }
-    console.error(`Error during query for "${question}":`, errorMessage);
-    // Check for a 'cause' property, which might not be standard
-    if (typeof error === 'object' && error !== null && 'cause' in error) {
-      console.error('Cause:', (error as { cause: unknown }).cause);
-    }
-  }
+console.log('\n4️⃣  Bob cannot see Alice\'s notes and vice versa — each request builds');
+console.log('    a fresh server instance closed over exactly one verified caller.\n');
+
+async function report(
+  client: Awaited<ReturnType<typeof connectWhenReady>>,
+  name: string,
+  args: Record<string, unknown>,
+): Promise<void> {
+  const result = await client.callTool({ name, arguments: args });
+  const marker = result.isError ? '⛔' : '✅';
+  console.log(`   ${marker} ${name}: ${renderContent(result.content)}`);
 }
-
-async function main() {
-  console.log('🔐 Testing with different API keys:\n');
-
-  // Test Bob's access
-  console.log("=== Testing Bob's Access ===\n");
-  const bobClient = await createClient(BOB_API_KEY);
-  await runQuery(bobClient, 'Show me my account balance.');
-  await runQuery(bobClient, 'Show me my recent transactions.');
-  await runQuery(
-    bobClient,
-    'List all my transactions with amounts and descriptions.',
-  );
-  bobClient.close();
-
-  // Test Alice's access
-  console.log("\n=== Testing Alice's Access ===\n");
-  const aliceClient = await createClient(ALICE_API_KEY);
-  await runQuery(aliceClient, 'Show me my account balance.');
-  await runQuery(aliceClient, 'Show me my recent transactions.');
-  await runQuery(
-    aliceClient,
-    'List all my transactions with amounts and descriptions.',
-  );
-  aliceClient.close();
-}
-
-main().catch(console.error);

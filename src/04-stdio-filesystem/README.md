@@ -1,70 +1,114 @@
-# MCP Demo: Stdio & Filesystem Tools
+# 04. stdio and the filesystem
 
-## Introduction
+A local server over stdin and stdout. The client spawns the process; the
+process boundary is the trust boundary.
 
-What if your AI assistant could interact with your computer—reading files, writing data, or even asking you questions via the console? The Model Context Protocol (MCP) makes this possible by exposing standard input/output (stdio) and filesystem operations as tools the AI can use. This demo shows how to safely and effectively empower your AI with these capabilities, while keeping security and control firmly in your hands.
+## You leave able to
 
-## Why Give AI Access to Stdio and Files?
+- Run an MCP server over stdio without poisoning the protocol stream on stdout
+- Contain filesystem paths with resolve-then-check (not string scans for `..`)
+- Account for the SDK `auto` probe spawning a short-lived sibling process
 
-By allowing the AI to interact with files and the console, you unlock a world of practical applications:
+## Run
 
-- Automate repetitive file tasks (reading, writing, organising)
-- Build interactive scripts that ask users for input
-- Enable the AI to process or generate reports, logs, or data files
+```bash
+pnpm example:04
+```
 
-However, with great power comes great responsibility—so security and careful design are paramount.
+One command covers it: the client spawns its own server.
 
-## How It Works: Step by Step
+## Concepts
 
-1. **Tool Definition:** Define tools for specific stdio and filesystem operations (e.g., `readFile`, `writeFile`, `listDirectory`, `getUserInput`). Each tool should have clear parameters and outputs.
-2. **User Request or AI Decision:** The user asks the AI to perform an action (e.g., "Show me all files in Documents"), or the AI decides it needs to read or write data.
-3. **Tool Invocation:** The AI selects and calls the appropriate tool with the necessary arguments.
-4. **MCP Execution:** The MCP framework executes the tool, interacting with the underlying operating system.
-5. **Result or Feedback:**
-   - For read operations, the tool returns data to the AI, which can use or present it.
-   - For write operations, the tool returns a success/failure status, and the AI can inform the user.
+**Process boundary as auth.** No port, no bearer token, no network. Whoever can
+spawn the process can call everything it exposes. Local MCP servers for
+filesystems, git, and databases ship this way. Host apps (Claude Desktop,
+Cursor, VS Code) launch them from config such as:
 
-## Running the Demo
+```json
+{
+  "mcpServers": {
+    "workshop-fs": {
+      "command": "pnpm",
+      "args": ["tsx", "src/04-stdio-filesystem/server.ts"]
+    }
+  }
+}
+```
 
-To try out this demo:
+Paths and package managers vary by host. Keep the idea: spawn command + args,
+no URL.
 
-1. Start the server:
-   ```sh
-   pnpm example:server:04
-   ```
-2. In a separate terminal, after a few seconds, run the client:
-   ```sh
-   pnpm example:client:04
-   ```
+Two things account for most "the server won't start" reports. A host launches
+the command from **its own** working directory, not your project, so relative
+paths in `args` resolve somewhere you did not expect: use absolute paths, or a
+`cwd`. And a host launched from the desktop inherits a minimal `PATH`, so
+`pnpm` or `node` installed through a version manager is often not on it: give
+the absolute binary path when in doubt.
 
-Try various filesystem and stdio operations as described above.
+**Debug it with the Inspector before you debug it in a host.** The Inspector
+spawns a stdio server the same way, and shows you the raw exchange:
 
-## Key MCP Features Demonstrated
+```bash
+pnpm inspect
+# transport: stdio
+# command: pnpm   args: tsx src/04-stdio-filesystem/server.ts
+```
 
-- **Bridging to OS Capabilities:** MCP tools can act as a bridge between the AI and your computer's capabilities.
-- **Action-Oriented Tools:** Demonstrates tools that perform real actions, not just return data.
-- **Structured Access:** Provides a controlled way for AI to interact with complex environments like the filesystem.
+If the tools list is right there and wrong in your host, the problem is the
+host's config, not your server.
 
-## Best Practices & Security Guidance
+**Keep stdout clean.** stdout carries the protocol stream. One stray
+`console.log` corrupts it. Log to stderr, as this server does. The client
+forwards stderr with `stderr: 'inherit'`.
 
-- **Strict Permissions:** Only allow the AI access to specific directories or files. Never grant unrestricted access.
-- **Input Sanitisation:** Always validate and sanitise file paths and user input to prevent security risks (e.g., path traversal).
-- **User Confirmation:** For potentially destructive actions (like deleting files), require explicit user approval.
-- **Error Handling:** Handle errors (file not found, permission denied, etc.) gracefully and informatively.
-- **Resource Limits:** Impose limits on file sizes, number of files, or stdio interactions to prevent abuse or accidental overload.
-- **Sandboxing:** Where possible, run AI operations in a sandboxed environment to contain any risks.
+**Path containment.** `resolveWithinRoot` is the security model: resolve the
+path, then check containment with `relative()`, before any I/O. The client asks
+for `../../../etc/passwd` so you can watch the check refuse it. Scanning the
+raw string for `..` fails against symlinks and encodings. Resolve first.
 
-## Troubleshooting & Tips
+**The `auto` probe spawns a sibling.** On the SDK's stdio transport the
+`server/discover` probe runs in a short-lived second process. Some stdio
+servers exit on any pre-`initialize` request; the probe must not spend your one
+child. Your transport spawns once, after the era is known.
 
-- If a tool fails, check permissions and input validation first.
-- For interactive scripts, ensure the AI clearly communicates what input it needs from the user.
-- Always log actions taken by the AI for auditability and debugging.
+## Try this
 
-## Further Reading
+1. Run the module. Confirm a normal read inside the root succeeds.
+2. Confirm the traversal request is refused before I/O.
+3. Add a temporary `console.log` on the server hot path, rerun, and watch the
+   client fail to parse the stream. Remove it.
 
-- [Model Context Protocol Documentation](https://modelcontextprotocol.org/)
-- [Securing AI File Access](https://yourcompany.com/blog/ai-filesystem-security)
+## If it breaks
+
+| Symptom | Likely cause |
+|---|---|
+| Client JSON parse errors / hung connect | Server wrote to stdout |
+| Traversal appears to work | Check skipped resolve, or root set too wide |
+| Long stall then legacy fallback | `auto` probe against a server that ignores unknown pre-handshake input; pin era or expose `auto` behind a flag ([module 07](../07-playwright-demo)) |
+
+## Stretch
+
+Add a `listDirectory` tool that returns only entries under the root, with the
+same resolve-then-contain check on the directory argument.
+
+## Related
+
+HTTP servers with real auth: [06](../06-auth-api-key),
+[09](../09-oauth-authentication). Legacy stdio interop: [07](../07-playwright-demo).
+
+## Files
+
+- [`server.ts`](server.ts): stdio transport + path guard
+- [`client.ts`](client.ts): spawns server, exercises tools
+
+<!-- nav -->
 
 ---
 
-Giving your AI access to stdio and the filesystem opens up powerful new possibilities—but only if done with care. This demo shows how to balance capability with safety, so your AI can be both useful and trustworthy.
+Reference: [specification](https://modelcontextprotocol.io/specification/2026-07-28) ·
+[schema](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/schema/2026-07-28/schema.ts) ·
+[migration](../../docs/migration.md) ·
+[threats](../../docs/security.md) ·
+[SDK notes](../../docs/sdk-notes.md)
+
+[← 03, Prompts](../03-prompts) · [05, Multiple servers →](../05-multi-server)

@@ -1,435 +1,204 @@
-# MCP Demo: OAuth 2.1 Authentication with PKCE
+# 09. OAuth 2.1, hardened
 
-## Introduction
+An agent meets a remote MCP server for the first time: discover, register,
+consent, token, call. Then it hits a tool its token does not cover, and steps
+up.
 
-OAuth 2.1 with PKCE (Proof Key for Code Exchange) is the gold standard for securing remote MCP servers. While the Simplescraper guide touches on OAuth implementation, this example provides a **complete, production-ready OAuth 2.1 server** that exceeds the specifications and best practices covered in most guides.
+## You leave able to
 
-This implementation includes all required MCP OAuth endpoints, proper PKCE flow, client registration, security headers, and comprehensive error handling. You'll learn not just how to implement OAuth, but how to implement it **correctly and securely** for production use.
+- Follow RFC 8414 then OIDC discovery, rejecting issuer mismatch
+- Validate `iss` on the authorization response (RFC 9207 / [SEP-2468](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2468))
+- Drive step-up from an HTTP `403` + `WWW-Authenticate: insufficient_scope`
+- Prefer CIMD where you control an https `client_id`, with DCR still available
 
-## Why OAuth 2.1 with PKCE?
-
-OAuth 2.1 with PKCE provides several critical security advantages over simpler authentication methods:
-
-- **Zero Shared Secrets**: No client secrets that can be compromised
-- **Dynamic Code Challenges**: Each authorization request uses a unique challenge
-- **Replay Attack Prevention**: Authorization codes can only be used once
-- **Man-in-the-Middle Protection**: PKCE prevents code interception attacks
-- **Standards Compliance**: Required by MCP specification for remote servers
-
-## Complete OAuth 2.1 Flow Implementation
-
-Our implementation includes **all required endpoints** that many guides omit:
-
-### Core OAuth Endpoints
-
-- `POST /oauth/authorize` - Authorization endpoint with PKCE
-- `POST /oauth/token` - Token exchange endpoint
-- `POST /oauth/register` - Dynamic client registration (RFC 7591)
-- `POST /oauth/revoke` - Token revocation (RFC 7009)
-
-### Discovery Endpoints (Required by MCP)
-
-- `GET /.well-known/oauth-authorization-server` - Server metadata
-- `GET /.well-known/oauth-protected-resource` - Resource metadata
-- `GET /.well-known/openid_configuration` - OpenID Connect discovery
-
-### Additional Security Endpoints
-
-- `POST /oauth/introspect` - Token introspection (RFC 7662)
-- `GET /oauth/userinfo` - User information endpoint
-- `GET /oauth/keys` - JWK Set endpoint for token verification
-
-## Key Security Features
-
-### 1. PKCE Implementation
-
-```
-Client generates:
-code_verifier = random 43-128 character string
-code_challenge = base64url(sha256(code_verifier))
-
-Authorization request includes:
-- code_challenge
-- code_challenge_method=S256
-
-Token request must include:
-- code_verifier (validated against stored challenge)
-```
-
-### 2. Secure Token Handling
-
-- **JWT Access Tokens**: Self-contained, cryptographically signed
-- **Refresh Token Rotation**: New refresh token issued with each refresh
-- **Token Binding**: Tokens bound to client and session context
-- **Expiration Policies**: Short-lived access tokens, longer refresh tokens
-
-### 3. Client Registration & Validation
-
-- **Dynamic Client Registration**: Clients can register themselves
-- **Client Metadata Validation**: Strict validation of redirect URIs
-- **Rate Limiting**: Prevent abuse of registration endpoints
-- **Client Authentication**: Support for multiple authentication methods
-
-## Advanced Features Beyond Standard Guides
-
-### 1. Multi-Provider Authentication
-
-Support for multiple identity providers:
-
-- Firebase Authentication
-- Auth0
-- Clerk
-- Supabase Auth
-- Custom OIDC providers
-
-### 2. Session Management Integration
-
-- **Session Binding**: OAuth tokens bound to MCP sessions
-- **Session Persistence**: OAuth context survives MCP reconnections
-- **Session Isolation**: Each OAuth client gets isolated session state
-
-### 3. Comprehensive Error Handling
-
-Proper OAuth error responses with detailed debugging information:
-
-```json
-{
-  "error": "invalid_request",
-  "error_description": "Missing required parameter: code_challenge",
-  "error_uri": "https://tools.ietf.org/html/rfc6749#section-4.1.2.1",
-  "state": "client-provided-state"
-}
-```
-
-## Implementation Architecture
-
-```
-┌─────────────────┐
-│   MCP Client    │ ← Claude, ChatGPT, etc.
-├─────────────────┤
-│ OAuth 2.1 Layer │ ← Full PKCE flow implementation
-├─────────────────┤
-│ Token Validator │ ← JWT verification & session binding
-├─────────────────┤
-│   MCP Server    │ ← Your actual MCP tools/resources
-├─────────────────┤
-│ Identity Store  │ ← User management & authentication
-└─────────────────┘
-```
-
-## Running the Demo
-
-### 1. Environment Setup
-
-Create a `.env` file in this directory:
+## Run
 
 ```bash
-# OAuth Configuration
-OAUTH_ISSUER=http://localhost:3009
-OAUTH_CLIENT_ID=demo-client
-OAUTH_CLIENT_SECRET=demo-secret-not-used-with-pkce
-
-# JWT Signing (generate with: openssl rand -base64 32)
-JWT_SECRET=your-256-bit-secret-here
-
-# Identity Provider (choose one)
-FIREBASE_PROJECT_ID=your-firebase-project
-# OR
-AUTH0_DOMAIN=your-tenant.auth0.com
-AUTH0_CLIENT_ID=your-auth0-client-id
-# OR
-CLERK_SECRET_KEY=sk_test_...
+pnpm example:09
 ```
 
-### 2. Start the OAuth-Enabled MCP Server
+Watch the client log discovery fallback, consent, the first call, the 403
+challenge, re-consent, and the retry.
 
-```bash
-pnpm example:server:09
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant RS as Resource server
+    participant AS as Authorization server
+
+    C->>RS: tools/call (no token)
+    RS-->>C: 401 WWW-Authenticate + resource_metadata
+    C->>RS: GET protected-resource metadata
+    C->>AS: RFC 8414, then OIDC discovery
+    AS-->>C: metadata (issuer checked against the URL it was built from)
+    C->>AS: /authorize + PKCE S256 + resource indicator
+    AS-->>C: code + iss (validated before redemption, RFC 9207)
+    C->>AS: /token
+    AS-->>C: access token, audience = this resource
+    C->>RS: tools/call update_doc
+    RS-->>C: 403 insufficient_scope, scope="write"
+    C->>AS: re-authorize for "read write" — the union
+    C->>RS: tools/call update_doc
+    RS-->>C: 200
 ```
 
-### 3. Test the OAuth Flow
+## 2026-07-28 changes
 
-**Option A: Use MCP Inspector with OAuth**
+Hardening on top of ordinary OAuth 2.1:
 
-```bash
-pnpm inspect:09
+- **Scope challenges and step-up.** A call whose token lacks a required scope is a `403`
+  carrying `WWW-Authenticate: Bearer error="insufficient_scope", scope="write",
+  resource_metadata="…"`. A challenge is actionable: the client unions the
+  challenged scopes with what it already holds, re-authorizes, and retries. A
+  tool-result string cannot set status or `WWW-Authenticate`, so it cannot drive
+  step-up.
+- **Both metadata endpoints.** A client MUST try RFC 8414
+  (`/.well-known/oauth-authorization-server`) then OpenID Connect Discovery
+  (`/.well-known/openid-configuration`), in that order, and MUST reject a
+  document whose `issuer` is not the issuer the URL was built from. This AS
+  publishes OIDC only, so you can watch the fallback happen.
+- **RFC 9207 `iss` ([SEP-2468](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2468)).** The authorization response carries `iss`. The
+  client MUST validate it before redeeming the code. Skip that and an attacker
+  can induce a client that talks to several authorization servers into redeeming
+  a code at the wrong one (AS mix-up). Step 6 in `client.ts` runs the check.
+- **`application_type` ([SEP-837](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/837)).** CLI and desktop clients register as
+  `native`, so the AS stops rejecting their `http://127.0.0.1` redirects.
+- **Issuer-bound credentials ([SEP-2352](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2352)).** A `client_id` belongs to the issuer
+  that minted it and works nowhere else.
+- **CIMD over DCR.** Client ID Metadata Documents replace Dynamic Client
+  Registration: the `client_id` is an https URL the client controls, and the AS
+  fetches metadata from it. Under DCR the `client_id` owner asserts
+  `client_name` about itself, so it identifies no one in particular. DCR keeps
+  working for at least twelve months. `provider.ts` implements both paths.
+
+## The attacks these rules exist to stop
+
+Names worth knowing, because you will search for them the day something looks
+wrong.
+
+**AS mix-up.** A client that talks to several authorization servers is induced
+to redeem a code at the wrong one. The `iss` parameter closes it, which is why
+validating `iss` before redemption became a MUST ([SEP-2468](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2468)).
+
+**Confused deputy.** A server proxies OAuth to a third party with a *static*
+client ID. The user consented once, so the AS holds a consent cookie. An
+attacker sends that user a crafted authorization request carrying their own
+redirect URI, the consent screen is skipped, and the code lands somewhere it
+should not. A proxy using a static client ID MUST get consent for each
+dynamically registered client, and validate redirect URIs strictly. PKCE S256,
+which this module runs, is the other half.
+
+**Token passthrough.** Accepting a token that was not issued for this resource
+bypasses the downstream API's controls and breaks its audit trail. The resource
+indicator becoming the audience (RFC 8707) is what makes the check possible;
+`requireBearerAuth` is where it runs. [Module 06](../06-auth-api-key) has the
+same seam without the OAuth.
+
+The full catalogue, mapped to modules, is in
+[docs/security.md](../../docs/security.md).
+
+## Scope challenges and step-up
+
+```
+tools/call update_doc  →  403 Bearer error="insufficient_scope", scope="write"
+                          client holds "read", challenge wants "write"
+                          re-authorize for the union ("read write")
+tools/call update_doc  →  200
 ```
 
-**Option B: Manual OAuth Flow Testing**
+Three places implementations get this wrong:
 
-```bash
-# 1. Test server discovery
-curl http://localhost:3009/.well-known/oauth-authorization-server
+**The refusal must come from the HTTP layer.** A tool handler returning
+`{ isError: true, content: [{ text: 'insufficient_scope' }] }` cannot set a
+status code or a `WWW-Authenticate` header. The client sees a failed tool call
+and surfaces it to a human. Move the check to the auth gate:
 
-# 2. Register a client
-curl -X POST http://localhost:3009/oauth/register \
-  -H "Content-Type: application/json" \
-  -d '{"client_name": "test-client", "redirect_uris": ["http://localhost:8080/callback"]}'
-
-# 3. Start authorization flow (get this URL from server logs)
-open "http://localhost:3009/oauth/authorize?client_id=...&code_challenge=...&response_type=code"
-
-# 4. Test token exchange
-curl -X POST http://localhost:3009/oauth/token \
-  -H "Content-Type: application/json" \
-  -d '{"grant_type": "authorization_code", "code": "...", "code_verifier": "..."}'
+```ts
+const gate = requireBearerAuth({
+  verifier,
+  requiredScopes: requiredScopesFor(request),   // from Mcp-Name
+  resourceMetadataUrl: RESOURCE_METADATA_URL,
+});
 ```
 
-**Option C: Use the test client**
+**Know which scope the request needs before reading the body.** That is
+`Mcp-Name` ([SEP-2243](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2243),
+[module 11](../11-headers-and-cache)): the gate maps `update_doc` → `write` from
+a header. The per-tool guard stays in the handler as a backstop, because a
+2025-era client on the legacy fallback sends no `Mcp-Name` and the gate can only
+demand the baseline scope there.
 
-```bash
-pnpm example:client:09
-```
+**The client must union scopes on step-up.** Re-authorizing for only the
+challenged scope throws away everything already granted, and the next read fails
+the other way. Scope accumulation is the client's job.
 
-## Key Features Demonstrated
+Retry budget matters: a server that keeps challenging for a scope it will not
+grant is a permanent authorization failure.
 
-### OAuth 2.1 Compliance
+## Scope selection on the way in
 
-- ✅ **PKCE Required**: All authorization flows use PKCE
-- ✅ **No Client Secrets**: Public clients don't need secrets
-- ✅ **Refresh Token Rotation**: Refresh tokens are rotated on use
-- ✅ **Discovery Endpoints**: All required metadata endpoints
-- ✅ **Error Handling**: Proper OAuth error responses
+Priority order:
 
-### Security Best Practices
+1. `scope` from the initial `WWW-Authenticate` challenge, if present
+2. else `scopes_supported` from the protected-resource metadata
+3. else omit `scope`
 
-- ✅ **JWT Access Tokens**: Self-contained, verifiable tokens
-- ✅ **HTTPS Enforcement**: Redirect URIs must use HTTPS (configurable)
-- ✅ **CSRF Protection**: State parameter validation
-- ✅ **Rate Limiting**: Prevent brute force attacks
-- ✅ **Secure Headers**: HSTS, CSP, and other security headers
+Asking for everything in `scopes_supported` when the server already said what
+this operation needs is how consent screens demand write access to read a file.
+`scopes_supported` is the minimum for basic functionality. Everything else
+comes through step-up.
 
-### Production Features
+## Unchanged pieces
 
-- ✅ **Client Registration**: Dynamic client registration
-- ✅ **Token Introspection**: Validate tokens programmatically
-- ✅ **User Information**: Standard userinfo endpoint
-- ✅ **Token Revocation**: Revoke tokens when needed
-- ✅ **Monitoring**: Comprehensive logging and metrics
+- **PKCE S256** stays mandatory.
+- **The resource indicator becomes the audience** (RFC 8707). A token works at
+  one resource. A conforming client sends it nowhere else.
+- **The human's pick becomes the grant.** The client's `scope` parameter
+  suggests. What the human ticks at consent gets stamped onto the code. Read
+  the scope off the request instead and, since clients often omit `write`,
+  connections come out read-only with no warning.
+- **Discovery must describe the host the client called.** Build it from a
+  configured constant and a client that started at `www` receives metadata
+  naming the apex. It then refuses to send its own valid token, and loops.
 
-## Comparison with Other Implementations
+## Refresh tokens
 
-| Feature                 | Basic Guides      | Simplescraper Guide | This Implementation     |
-| ----------------------- | ----------------- | ------------------- | ----------------------- |
-| **PKCE Support**        | ❌ Often missing  | ✅ Basic            | ✅ Complete with S256   |
-| **Client Registration** | ❌ Manual only    | ✅ Basic            | ✅ Full RFC 7591        |
-| **Discovery Endpoints** | ❌ Limited        | ✅ Basic            | ✅ Complete metadata    |
-| **JWT Tokens**          | ❌ Simple strings | ✅ Basic            | ✅ Full JWT with claims |
-| **Refresh Tokens**      | ❌ Static         | ✅ Basic            | ✅ Rotation + binding   |
-| **Error Handling**      | ❌ Basic          | ✅ Good             | ✅ Comprehensive        |
-| **Multi-Provider**      | ❌ No             | ❌ Firebase only    | ✅ Multiple providers   |
-| **Production Ready**    | ❌ No             | ⚠️ Partial          | ✅ Complete             |
+Not implemented here: access tokens only. A resource server SHOULD NOT
+advertise `offline_access` in its `WWW-Authenticate` scope or in
+`scopes_supported`. Refresh is a client-to-AS concern; the resource never
+requires it. Clients that want refresh put `refresh_token` in their
+`grant_types` and add `offline_access` to the authorization request only when
+the AS metadata lists it.
 
-## Security Considerations
+## Try this
 
-### 1. Token Security
+1. Complete the happy path through consent and a read call.
+2. Trigger `update_doc` with a read-only token. Confirm the 403 challenge.
+3. After step-up, confirm both read and write succeed with the unioned scopes.
 
-```typescript
-// JWT tokens include security claims
-const tokenPayload = {
-  iss: process.env.OAUTH_ISSUER,
-  sub: user.id,
-  aud: client.client_id,
-  exp: Math.floor(Date.now() / 1000) + 3600, // 1 hour
-  iat: Math.floor(Date.now() / 1000),
-  scope: 'mcp:tools mcp:resources',
-  session_id: mcpSessionId, // Bind to MCP session
-};
-```
+## Stretch
 
-### 2. PKCE Validation
+Break `iss` validation on purpose in a local fork, complete an authorize
+redirect with a mismatched issuer, and confirm redeem refuses. Restore the
+check.
 
-```typescript
-// Strict PKCE validation
-if (storedChallenge.method === 'S256') {
-  const hash = crypto
-    .createHash('sha256')
-    .update(codeVerifier)
-    .digest('base64url');
-  if (hash !== storedChallenge.challenge) {
-    throw new OAuthError('invalid_grant', 'Invalid code_verifier');
-  }
-}
-```
+## Files
 
-### 3. Secure Storage
+- [`provider.ts`](provider.ts): AS: OIDC metadata, `/register`, `/authorize`,
+  `/consent`, PKCE `/token`
+- [`server.ts`](server.ts): resource server: `requireBearerAuth`, JWKS,
+  per-tool backstop
+- [`client.ts`](client.ts): raw HTTP through challenges, then SDK client
+- [`constants.ts`](constants.ts)
 
-```typescript
-// Store sensitive data securely
-const authorizationCode = {
-  code: generateSecureCode(),
-  clientId: client.client_id,
-  userId: user.id,
-  codeChallenge: challenge,
-  codeChallengeMethod: challengeMethod,
-  expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
-  used: false,
-};
-```
-
-## Integration with Identity Providers
-
-### Firebase Authentication
-
-```typescript
-const firebaseUser = await admin.auth().verifyIdToken(idToken);
-const mcpUser = {
-  id: firebaseUser.uid,
-  email: firebaseUser.email,
-  name: firebaseUser.name,
-  provider: 'firebase',
-};
-```
-
-### Auth0 Integration
-
-```typescript
-const auth0User = await auth0.getUser(accessToken);
-const mcpUser = {
-  id: auth0User.sub,
-  email: auth0User.email,
-  name: auth0User.name,
-  provider: 'auth0',
-};
-```
-
-## Advanced Usage Patterns
-
-### 1. Service Account Authentication
-
-For server-to-server scenarios:
-
-```bash
-curl -X POST http://localhost:3009/oauth/token \
-  -H "Content-Type: application/json" \
-  -d '{"grant_type": "client_credentials", "scope": "mcp:admin"}'
-```
-
-### 2. Token Refresh Flow
-
-```bash
-curl -X POST http://localhost:3009/oauth/token \
-  -H "Content-Type: application/json" \
-  -d '{"grant_type": "refresh_token", "refresh_token": "..."}'
-```
-
-### 3. Token Introspection
-
-```bash
-curl -X POST http://localhost:3009/oauth/introspect \
-  -H "Authorization: Bearer admin-token" \
-  -d "token=access-token-to-validate"
-```
-
-## Troubleshooting Guide
-
-### Common OAuth Issues
-
-**Problem**: "invalid_client" error during token exchange
-**Solution**: Verify client_id matches the one used in authorization
-
-**Problem**: "invalid_grant" error with PKCE
-**Solution**: Ensure code_verifier matches the original code_challenge
-
-**Problem**: "unsupported_grant_type" error
-**Solution**: Check that grant_type is one of: authorization_code, refresh_token, client_credentials
-
-### Debug Mode
-
-Enable OAuth debug logging:
-
-```bash
-DEBUG=oauth:* pnpm example:server:09
-```
-
-### Token Inspection
-
-Use the introspection endpoint to debug token issues:
-
-```bash
-curl -X POST http://localhost:3009/oauth/introspect \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "token=YOUR_ACCESS_TOKEN"
-```
-
-## Testing & Validation
-
-### OAuth Flow Testing
-
-```bash
-# Run the complete OAuth test suite
-pnpm test:oauth:09
-
-# Test specific grant types
-pnpm test:oauth:authorization-code
-pnpm test:oauth:refresh-token
-pnpm test:oauth:client-credentials
-```
-
-### Security Testing
-
-```bash
-# Test PKCE validation
-pnpm test:oauth:pkce
-
-# Test token security
-pnpm test:oauth:tokens
-
-# Test rate limiting
-pnpm test:oauth:rate-limits
-```
-
-## Production Deployment
-
-### Environment Variables
-
-```bash
-# Production OAuth settings
-OAUTH_ISSUER=https://your-mcp-server.com
-OAUTH_ENFORCE_HTTPS=true
-OAUTH_SESSION_TIMEOUT=3600
-
-# Security settings
-JWT_SECRET=your-production-secret
-CSRF_SECRET=your-csrf-secret
-RATE_LIMIT_WINDOW=900000
-RATE_LIMIT_MAX=100
-
-# Identity provider
-FIREBASE_SERVICE_ACCOUNT_KEY=/path/to/service-account.json
-```
-
-### Security Headers
-
-```typescript
-app.use(
-  helmet({
-    hsts: { maxAge: 31536000, includeSubDomains: true },
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'"],
-      },
-    },
-  }),
-);
-```
-
-## What's Next?
-
-This OAuth implementation provides the foundation for secure MCP servers. Build on it with:
-
-- **Example 10**: Dual transport support (HTTP+SSE and Streamable HTTP)
-- **Example 11**: Real API integration with OAuth context
-- **Example 12**: Production deployment with monitoring
-
-## Further Reading
-
-- [OAuth 2.1 Specification](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1)
-- [PKCE Specification (RFC 7636)](https://tools.ietf.org/html/rfc7636)
-- [OAuth 2.0 Security Best Practices](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-security-topics)
-- [Dynamic Client Registration (RFC 7591)](https://tools.ietf.org/html/rfc7591)
+<!-- nav -->
 
 ---
 
-This OAuth 2.1 implementation goes far beyond basic authentication, providing a production-ready foundation for secure MCP servers that meets enterprise security requirements.
+Reference: [specification](https://modelcontextprotocol.io/specification/2026-07-28) ·
+[schema](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/schema/2026-07-28/schema.ts) ·
+[migration](../../docs/migration.md) ·
+[threats](../../docs/security.md) ·
+[SDK notes](../../docs/sdk-notes.md)
+
+[← 08, The stateless core](../08-stateless-core) · [10, Multi Round-Trip Requests →](../10-mrtr)

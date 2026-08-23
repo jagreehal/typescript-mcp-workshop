@@ -1,54 +1,47 @@
-import {
-  experimental_createMCPClient as createMCPClient,
-  generateText,
-} from 'ai';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp';
+import { generateText, stepCountIs } from 'ai';
+import { mcpToolsFrom } from '../shared/ai-tools';
+import { connectWhenReady } from '../shared/connect';
+import { model } from '../model';
+import { PAYMENT_SERVER_URL, USER_SERVER_URL } from './constants';
 
-import { USER_SERVER_PORT, PAYMENT_SERVER_PORT } from './constants';
-import { groqModel as model } from '../model';
+/**
+ * One agent, two servers. Neither server knows the other exists — the model is
+ * what joins them: "look up Bob's ID on the user service, then ask the payment
+ * service for that ID's balance."
+ *
+ * Prefixing tool names per server is the whole trick. Two servers will
+ * eventually both export a `search`, and a flat namespace makes that a silent
+ * wrong-server call.
+ */
 
-// Create MCP clients for both servers
-const userUrl = new URL(`http://localhost:${USER_SERVER_PORT}/mcp`);
-const userClient = await createMCPClient({
-  transport: new StreamableHTTPClientTransport(userUrl),
-});
+const [userClient, paymentClient] = await Promise.all([
+  connectWhenReady(USER_SERVER_URL),
+  connectWhenReady(PAYMENT_SERVER_URL),
+]);
 
-const paymentUrl = new URL(`http://localhost:${PAYMENT_SERVER_PORT}/mcp`);
-const paymentClient = await createMCPClient({
-  transport: new StreamableHTTPClientTransport(paymentUrl),
-});
+const tools = await mcpToolsFrom({ users: userClient, payments: paymentClient });
+console.log(`\n🧰 combined catalog: ${Object.keys(tools).join(', ')}\n`);
 
-async function main() {
-  // Get tools from both servers
-  const userTools = await userClient.tools();
-  const paymentTools = await paymentClient.tools();
+const tasks = [
+  "What is Bob's balance? Look up his ID by email first (bob@example.com).",
+  'Transfer 250 from alice@example.com to charlie@example.com, then report both balances.',
+  'Try to transfer 99999 from charlie@example.com to bob@example.com and tell me what happened.',
+];
 
-  console.log('=== Available User Tools ===');
-  console.dir(userTools, { depth: null });
-
-  console.log('\n=== Available Payment Tools ===');
-  console.dir(paymentTools, { depth: null });
-
-  const allTools = { ...userTools, ...paymentTools };
-
-  const emails = [
-    'bob@example.com',
-    'alice@example.com',
-    'charlie@example.com',
-  ];
-
-  for (const email of emails) {
-    const result = await generateText({
-      model,
-      tools: allTools,
-      prompt: `What are the recent transactions for ${email}?`,
-      maxSteps: 50,
-    });
-    console.log(`\n=== Transactions for ${email} ===`);
-    console.log(result.text);
-  }
-
-  await Promise.all([userClient.close(), paymentClient.close()]);
+for (const prompt of tasks) {
+  console.log(`Q: ${prompt}`);
+  const { text, steps } = await generateText({
+    model,
+    tools,
+    prompt,
+    stopWhen: stepCountIs(15),
+  });
+  const called = steps
+    .flatMap((step) => step.toolCalls)
+    .map((call) => call.toolName)
+    .join(' → ');
+  console.log(`   calls: ${called || '(none)'}`);
+  console.log(`A: ${text}\n`);
 }
 
-main().catch(console.error);
+await Promise.all([userClient.close(), paymentClient.close()]);

@@ -3,7 +3,10 @@
   "compilerOptions": {
     "module": "ESNext",
     "target": "ESNext",
-    "moduleResolution": "node",
+    // The v2 SDK ships an `exports` map only — "node" (node10) resolution cannot see it.
+    "moduleResolution": "bundler",
+    // TypeScript >= 6 stops auto-including @types/*, and the v2 .d.mts references Buffer.
+    "types": ["node"],
     "noEmit": true,
     "outDir": "./dist"
   },

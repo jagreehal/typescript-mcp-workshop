@@ -1,70 +1,76 @@
-# MCP Demo: Prompts
+# 03. Prompts
 
-## Introduction
+Parameterised message templates a user picks: the slash commands in a host UI.
 
-At the heart of every AI conversation is the prompt—the message that tells the assistant what you want. In the Model Context Protocol (MCP), prompts are more than just questions; they're carefully structured inputs that guide the AI's behaviour, context, and responses. This demo explores how prompts work in MCP, how to craft them effectively, and why good prompting is essential for getting the best from your AI assistant.
+## You leave able to
 
-## Why Prompts Matter
+- Register a prompt with typed arguments and `completable` suggestions
+- Avoid the silent `.describe()`-after-`completable` failure
+- Keep prompt roles to `user` / `assistant` (MCP has no `system` role)
 
-A well-crafted prompt can mean the difference between a helpful answer and a confusing one. Prompts set the stage for the AI, providing not just the user's question, but also instructions, examples, and context. In MCP, prompts can include:
+## Run
 
-- System messages (instructions for the AI)
-- User queries
-- Example conversations (few-shot learning)
-- Information about available tools and resources
+```bash
+pnpm example:03
+```
 
-## How It Works: Step by Step
+## Concepts
 
-1. **User Input or System Design:** The user provides a query, or the system constructs a prompt using user input and other context (like available tools or resources).
-2. **Prompt Formulation:** The input is formatted into a structured prompt, which may include:
-   - _System Message_: Instructions about the AI's role or constraints
-   - _User Message_: The actual question or command
-   - _Assistant Messages_: Example responses to guide the AI
-   - _Tool/Resource Info_: Descriptions of what's available to the AI
-3. **Sending to AI:** The complete prompt is sent to the language model via MCP.
-4. **AI Processing:** The AI interprets the prompt, considering all context provided.
-5. **Response Generation:** The AI generates a response—this could be a direct answer, a decision to call a tool, or a combination.
+**A user starts a prompt.** The model chooses a tool. A human chooses a prompt
+from a menu. That split is why prompts get argument completion and tools do not.
 
-## Running the Demo
+**Completion.** `completable(schema, callback)` makes an argument
+autocompletable. The client calls `completion/complete` while the user types.
 
-To try out this demo:
+> Put `.describe()` **inside** `completable()`. Chain it afterwards and you get
+> a fresh schema with no completable marker. The SDK skips registering a
+> `completion/complete` handler, and the call dies with `-32601 Method not
+> found`. Chaining `.optional()` afterwards is fine: the SDK unwraps optionals
+> before it checks.
+>
+> ```ts
+> completable(z.string().describe('Language'), cb).optional()   // works
+> completable(z.string(), cb).describe('Language').optional()   // fails, silent
+> ```
 
-1. Start the server:
-   ```sh
-   pnpm example:server:03
-   ```
-2. In a separate terminal, after a few seconds, run the client:
-   ```sh
-   pnpm example:client:03
-   ```
+**No `system` role.** Prompt messages carry `user` or `assistant`. Put
+instructions in a user message. An `assistant` message stands for a prior turn.
+AI SDK v7 rejects a `system` role inside `messages`, which enforces this.
 
-Observe how different prompts affect the AI's responses.
+**The server renders, the client runs.** `prompts/get` returns messages. The
+client decides which model consumes them. The server holds no API key.
 
-## Key MCP Features Demonstrated
+## Try this
 
-- **User Intent Capture:** How prompts convey what the user wants.
-- **Prompt Engineering:** The structure and content of a prompt can dramatically affect the AI's output.
-- **Integration with Tools/Resources:** Prompts operate in an environment where tools and resources exist and can be referenced or triggered.
+1. List prompts. Open the one this module registers.
+2. Trigger completion on a completable argument while typing a prefix.
+3. Break the schema on purpose: move `.describe()` outside `completable`,
+   restart, and confirm `completion/complete` returns `-32601`.
 
-## Best Practices for Prompting
+## Stretch
 
-- **Be Clear and Specific:** The more precise your instructions, the better the AI's response.
-- **Provide Context:** If the answer depends on certain facts, include them in the prompt.
-- **Define Roles:** Use system messages to set the AI's persona or rules.
-- **Use Examples:** For complex tasks, show the AI what a good answer looks like.
-- **Iterate and Refine:** Prompting is often an iterative process—experiment and adjust for best results.
+Add a second prompt with two completable arguments (language and tone). Keep
+descriptions inside `completable()`.
 
-## Troubleshooting & Tips
+## Related
 
-- If the AI's answers are off-topic, check if the prompt is missing key context or instructions.
-- For multi-step tasks, break down the prompt or provide step-by-step examples.
-- Use prompts to guide the AI towards using tools or resources when appropriate.
+Tools: [module 01](../01-tools-only). Prompt list-change notifications:
+[module 13](../13-subscriptions).
 
-## Further Reading
+## Files
 
-- [Model Context Protocol Documentation](https://modelcontextprotocol.org/)
-- [Prompt Engineering Guide](https://yourcompany.com/blog/prompt-engineering)
+- [`server.ts`](server.ts): prompt + completion handlers
+- [`client.ts`](client.ts): getPrompt and a short model run
+- [`constants.ts`](constants.ts)
+
+<!-- nav -->
 
 ---
 
-Mastering prompts is the key to unlocking the full potential of your AI assistant. This demo shows how thoughtful prompt design leads to more accurate, relevant, and useful AI interactions.
+Reference: [specification](https://modelcontextprotocol.io/specification/2026-07-28) ·
+[schema](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/schema/2026-07-28/schema.ts) ·
+[migration](../../docs/migration.md) ·
+[threats](../../docs/security.md) ·
+[SDK notes](../../docs/sdk-notes.md)
+
+[← 02, Resources](../02-resources) · [04, stdio and the filesystem →](../04-stdio-filesystem)

@@ -1,78 +1,63 @@
-# MCP Demo: Playwright Integration
+# 07. A third-party server
 
-## Introduction
+Connect to `@playwright/mcp`, built on the v1 SDK and speaking 2025-11-25, from
+a 2026-07-28 client.
 
-Imagine an AI assistant that can browse the web, fill in forms, click buttons, and extract information from live websites—all on your behalf. By integrating Playwright, a powerful browser automation library, with the Model Context Protocol (MCP), you can give your AI these superpowers in a safe and controlled way. This demo shows how to expose Playwright's capabilities as MCP tools, enabling AI-driven browser automation for real-world tasks.
+## You leave able to
 
-## Why Integrate Playwright with MCP?
+- Read the negotiated era (`legacy` vs modern) off a connection
+- Use `mode: 'auto'` to probe with `server/discover` and fall back to
+  `initialize`
+- Know when to skip `auto` (spawn-per-invocation CLIs, byte-stable transcripts)
 
-Web automation opens up a world of possibilities:
+## Run
 
-- Automatically gather data from websites
-- Test web applications end-to-end
-- Perform repetitive online tasks (booking, searching, scraping)
-- Enable AI to interact with the web as a human would
-
-By wrapping Playwright actions as MCP tools, you ensure that every browser action is explicit, auditable, and under your control.
-
-## How It Works: Step by Step
-
-1. **Playwright Tool Server:** An MCP server is set up with tools that wrap common Playwright actions (e.g., `navigateTo`, `click`, `typeText`, `getInnerText`, `takeScreenshot`).
-2. **Browser Instance Management:** The server manages one or more browser instances (Chromium, Firefox, WebKit) in the background.
-3. **User Request or AI Plan:** The user asks the AI to perform a web task (e.g., "Check the weather in London on weather.com").
-4. **Tool Invocation via MCP:** The AI breaks down the task into a sequence of browser actions and calls the corresponding Playwright tools.
-5. **Playwright Execution:** The server translates tool calls into real browser commands, controlling the browser instance.
-6. **Results & Feedback:** Results (text, screenshots, success/failure) are returned to the AI, which can use them to continue the task or present the outcome to the user.
-
-## Running the Demo
-
-To try out this demo:
-
-1. Run the client:
-   ```sh
-   pnpm example:client:07
-   ```
-
-Ensure Playwright browsers are installed:
-
-```sh
-npx playwright install
+```bash
+pnpm example:07
 ```
 
-When running the demo, try giving the AI a high-level goal (e.g., "Find the price of product X on shopping-site.com"). Watch as it calls a sequence of Playwright tools to navigate, interact, and extract information.
+The client launches Playwright MCP itself.
 
-## Key MCP Features Demonstrated
+## Concepts
 
-- **Complex Tool Orchestration:** AI managing a sequence of tool calls to achieve a multi-step web task.
-- **Interfacing with External Libraries:** MCP tools acting as wrappers around Playwright.
-- **Web Automation:** Practical examples of AI performing tasks on live websites.
-- **Stateful Interaction:** The browser maintains state (e.g., cookies, current page) across multiple tool calls.
+**The connection reports era `legacy`.** `mode: 'auto'` probes with
+`server/discover`, sees nothing modern come back, and falls back to the plain
+`initialize` handshake: byte for byte what a 2025 client would have sent.
 
-## Best Practices & Security Guidance
+**That fallback is how you migrate.** Adopt 2026-07-28 in your client without
+waiting for every server you talk to. The probe costs one extra round trip over
+HTTP, and one extra short-lived process over stdio ([module 04](../04-stdio-filesystem)).
 
-- **Robust Selectors:** Use reliable selectors (IDs, data attributes) for web elements to make automation less brittle.
-- **Error Handling & Retries:** Web automation can be unpredictable—handle errors gracefully and consider retry logic.
-- **Explicit Waits:** Use Playwright's waiting features to ensure elements are ready before interacting.
-- **Security (Critical):**
-  - Never allow the AI to navigate to arbitrary, untrusted URLs without validation.
-  - Be cautious with data extracted from the web—validate and sanitise as needed.
-  - If filling forms, restrict what data the AI can submit, especially sensitive information.
-  - Run browsers in a sandboxed environment where possible.
-- **Resource Management:** Ensure browser instances are closed after use to free up resources.
-- **Headless vs. Headful:** Use headless mode for automation, headful for debugging.
+**Skip `auto` for spawn-per-invocation CLI tools**, and for anything whose
+value rests on byte-stable transcripts. A legacy stdio server that ignores
+unknown pre-`initialize` requests stalls `connect()` for the full probe timeout
+before falling back. Keep a pinned era as the default in production configs.
+Expose `auto` behind a flag when you need discovery.
 
-## Troubleshooting & Tips
+## Try this
 
-- If automation fails, check browser installation and selector accuracy.
-- For complex flows, break tasks into smaller, well-defined tool calls.
-- Log all browser actions for auditability and debugging.
+1. Run the module. Confirm the logged era is `legacy`.
+2. List tools from Playwright MCP and call one safe read-only tool.
+3. Pin `{ pin: '2026-07-28' }` in a throwaway edit and confirm connect fails
+   instead of falling back (restore afterwards).
 
-## Further Reading
+## Related
 
-- [Model Context Protocol Documentation](https://modelcontextprotocol.org/)
-- [Playwright Documentation](https://playwright.dev/)
-- [AI and Web Automation](https://yourcompany.com/blog/ai-web-automation)
+Stateless modern servers: [08](../08-stateless-core). Explicit pin behaviour
+there shows the other side of negotiation.
+
+## Files
+
+- [`client.ts`](client.ts): spawns Playwright MCP, negotiates era
+
+<!-- nav -->
 
 ---
 
-Integrating Playwright with MCP empowers your AI to interact with the web in powerful new ways. With careful design and robust security, you can automate online tasks, gather data, and test applications—all through the intelligence of your assistant.
+Reference: [specification](https://modelcontextprotocol.io/specification/2026-07-28) ·
+[schema](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/schema/2026-07-28/schema.ts) ·
+[migration](../../docs/migration.md) ·
+[threats](../../docs/security.md) ·
+[SDK notes](../../docs/sdk-notes.md)
+
+[← 06, API-key auth](../06-auth-api-key) · [08, The stateless core →](../08-stateless-core)
